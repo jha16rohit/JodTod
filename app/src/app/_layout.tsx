@@ -1,9 +1,9 @@
+import "../../global.css";
 import { useEffect, useState } from 'react';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useFonts } from 'expo-font'; // only if you're loading custom fonts
+import { useFonts } from 'expo-font';
 
-// Keep the native splash screen visible while we prepare
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
@@ -13,7 +13,6 @@ export default function RootLayout() {
     async function prepare() {
       try {
         // Preload any fonts/assets your AnimatedIntro needs here
-        // await Font.loadAsync({...});
       } catch (e) {
         console.warn(e);
       } finally {
@@ -25,20 +24,18 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (appIsReady) {
-      // Hide native splash — AnimatedIntro (rendered by index.tsx) takes over immediately
       SplashScreen.hideAsync();
     }
   }, [appIsReady]);
 
   if (!appIsReady) {
-    return null; // native splash screen still showing at this point
+    return null;
   }
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
       <Stack.Screen name="onboarding" />
-      {/* your other screens */}
     </Stack>
   );
 }

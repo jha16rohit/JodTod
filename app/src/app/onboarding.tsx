@@ -3,7 +3,6 @@ import {
   View,
   Text,
   Image,
-  StyleSheet,
   Dimensions,
   ScrollView,
   TouchableOpacity,
@@ -68,7 +67,7 @@ export default function Onboarding() {
   };
 
   return (
-    <View style={styles.container}>
+    <View className="flex-1 bg-white">
       <ScrollView
         ref={scrollRef}
         horizontal
@@ -77,30 +76,50 @@ export default function Onboarding() {
         onMomentumScrollEnd={handleScroll}
       >
         {slides.map((slide) => (
-          <View key={slide.id} style={[styles.slide, { width }]}>
-            <Image source={slide.image} style={styles.image} resizeMode="contain" />
-            <Text style={styles.title}>{slide.title}</Text>
-            <Text style={styles.subtitle}>{slide.subtitle}</Text>
+          <View
+            key={slide.id}
+            style={{ width }}
+            className="flex-1 items-center justify-center px-7"
+          >
+            <Image
+              source={slide.image}
+              style={{ width: width * 0.85, height: width * 0.85 }}
+              className="mb-6"
+              resizeMode="contain"
+            />
+            <Text className="text-[22px] font-bold text-[#0B3D62] mb-3 text-center">
+              {slide.title}
+            </Text>
+            <Text className="text-sm text-[#666] text-center leading-[21px] px-2">
+              {slide.subtitle}
+            </Text>
           </View>
         ))}
       </ScrollView>
 
-      <View style={styles.footer}>
+      <View className="flex-row items-center justify-between px-7 pb-10 pt-4">
         <TouchableOpacity onPress={handleSkip}>
-          <Text style={styles.skipText}>Skip</Text>
+          <Text className="text-[15px] font-semibold text-[#20A374]">Skip</Text>
         </TouchableOpacity>
 
-        <View style={styles.dots}>
+        <View className="flex-row gap-1.5">
           {slides.map((_, index) => (
             <View
               key={index}
-              style={[styles.dot, index === activeIndex && styles.dotActive]}
+              className={
+                index === activeIndex
+                  ? 'h-2 w-5 rounded-full bg-[#20A374]'
+                  : 'h-2 w-2 rounded-full bg-[#D9D9D9]'
+              }
             />
           ))}
         </View>
 
-        <TouchableOpacity style={styles.actionButton} onPress={handleNext}>
-          <Text style={styles.actionButtonText}>
+        <TouchableOpacity
+          className="bg-[#20A374] py-3 px-6 rounded-[10px] min-w-[100px] items-center"
+          onPress={handleNext}
+        >
+          <Text className="text-white text-[15px] font-semibold">
             {isLastSlide ? 'Get Started' : 'Next'}
           </Text>
         </TouchableOpacity>
@@ -108,86 +127,3 @@ export default function Onboarding() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-
-  slide: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 28,
-  },
-
-  image: {
-    width: width * 0.85,
-    height: width * 0.85,
-    marginBottom: 24,
-  },
-
-  title: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#0B3D62',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-
-  subtitle: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
-    lineHeight: 21,
-    paddingHorizontal: 8,
-  },
-
-  footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 28,
-    paddingBottom: 40,
-    paddingTop: 16,
-  },
-
-  skipText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#20A374',
-  },
-
-  dots: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#D9D9D9',
-  },
-
-  dotActive: {
-    backgroundColor: '#20A374',
-    width: 20,
-  },
-
-  actionButton: {
-    backgroundColor: '#20A374',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 10,
-    minWidth: 100,
-    alignItems: 'center',
-  },
-
-  actionButtonText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-});
