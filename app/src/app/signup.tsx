@@ -36,18 +36,22 @@ export default function Signup() {
             <Ionicons name="arrow-back" size={20} color="#0B3D62" />
           </TouchableOpacity>
 
-          <Text className="text-2xl font-bold text-[#0B3D62] mb-1.5">
-            Create account
+          <Text className="text-2xl font-bold text-[#1a5d1b] mb-1.5">
+           Create a profile
           </Text>
           <Text className="text-sm text-[#3A5468] leading-5">
-            Sign up to start planning trips{'\n'}and splitting expenses with friends
+            {/* Sign up to start planning trips{'\n'}and splitting expenses with friends */}
+            Sign up to plan trips{'\n'} and split bills {'\n'}with friends.
           </Text>
         </ImageBackground>
 
         <View className="bg-white -mt-[30px] rounded-t-[28px] px-6 pt-8 pb-10">
-          <Text className="text-xl font-bold text-[#0B3D62] mb-6">
-            Create your account
-          </Text>
+          <Text
+           className="text-2xl font-bold text-[#180a5c] mb-4"
+           style={{ letterSpacing: 0.8 }}
+             >
+           Create your account
+           </Text>
 
           <Text className="text-[13px] text-[#3A5468] mb-2 font-semibold">
             Full name
@@ -172,11 +176,11 @@ export default function Signup() {
           </TouchableOpacity>
 
           <View className="flex-row items-center justify-center mb-4">
-            <Image
+            {/* <Image
               source={require('../../assets/images/jodtod/jodtod-text.png')}
               className="w-[110px] h-8"
               resizeMode="contain"
-            />
+            /> */}
           </View>
 
           <View className="flex-row items-center mb-5">
@@ -205,19 +209,14 @@ export default function Signup() {
             </TouchableOpacity>
           </View>
 
-          <View className="flex-row bg-[#EAF6F1] rounded-2xl p-3.5 items-start gap-3">
+          {/* <View className="flex-row bg-[#EAF6F1] rounded-2xl p-3.5 items-start gap-3">
             <View className="w-[34px] h-[34px] rounded-full bg-white items-center justify-center">
               <Ionicons name="shield-checkmark" size={20} color="#20A374" />
             </View>
             <View className="flex-1">
-              <Text className="text-[13px] font-bold text-[#0B3D62] mb-0.5">
-                Your data is safe with us
-              </Text>
-              <Text className="text-xs text-[#5A7385] leading-[17px]">
-                We never share your personal information with anyone.
-              </Text>
-            </View>
-          </View>
+          
+            </View> */}
+          {/* </View> */}
         </View>
       </ScrollView>
     </View>

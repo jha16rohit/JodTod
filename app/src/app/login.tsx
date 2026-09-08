@@ -33,18 +33,22 @@ export default function Login() {
             <Ionicons name="arrow-back" size={20} color="#0B3D62" />
           </TouchableOpacity>
 
-          <Text className="text-2xl font-bold text-[#0B3D62] mb-1.5">
-            Welcome back!
+          <Text className="text-2xl font-bold text-[#10032f] mb-1.5">
+            Hey, you're back!
           </Text>
-          <Text className="text-sm text-[#3A5468] leading-5">
-            Login to continue managing{'\n'}your trips and expenses
+          <Text className="text-sm text-[#0B3D62] leading-5">
+            {/* Login to continue managing{'\n'}your trips and expenses */}
+            Log in to keep tracking {'\n'} your trips and expenses.
           </Text>
         </ImageBackground>
 
         <View className="bg-white -mt-[30px] rounded-t-[28px] px-6 pt-8 pb-10">
-          <Text className="text-xl font-bold text-[#0B3D62] mb-6">
-            Login to your account
-          </Text>
+         <Text
+  className="text-2xl font-bold text-[#180a5c] mb-4"
+  style={{ letterSpacing: 0.8 }}
+>
+  Login to your account
+</Text>
 
           <Text className="text-[13px] text-[#3A5468] mb-2 font-semibold">
             Email address
