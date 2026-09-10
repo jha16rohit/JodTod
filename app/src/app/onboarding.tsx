@@ -11,6 +11,7 @@ import {
   ImageBackground,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { BlurView } from 'expo-blur';
 
 const { width } = Dimensions.get('window');
 
@@ -50,6 +51,7 @@ export default function Onboarding() {
       x: index * width,
       animated: true,
     });
+
     setActiveIndex(index);
   };
 
@@ -59,6 +61,7 @@ export default function Onboarding() {
     const index = Math.round(
       e.nativeEvent.contentOffset.x / width
     );
+
     setActiveIndex(index);
   };
 
@@ -81,6 +84,8 @@ export default function Onboarding() {
       className="flex-1"
     >
       <View className="flex-1">
+
+        {/* ================= CONTENT ================= */}
 
         <ScrollView
           ref={scrollRef}
@@ -116,34 +121,103 @@ export default function Onboarding() {
           ))}
         </ScrollView>
 
+        {/* ================= BOTTOM CONTROLS ================= */}
+
         <View className="flex-row items-center justify-between px-7 pb-10 pt-4">
 
-          <TouchableOpacity onPress={handleSkip}>
-            <Text className="text-[15px] font-semibold text-[#20A374]">
-              Skip
-            </Text>
+          {/* ================= SKIP ================= */}
+
+          <TouchableOpacity
+            onPress={handleSkip}
+            activeOpacity={0.85}
+            className="overflow-hidden rounded-[16px]"
+          >
+            <View
+              className="
+                min-w-[80px]
+                overflow-hidden
+                rounded-[16px]
+                border
+                border-white/60
+              "
+            >
+
+              {/* Blur */}
+              <BlurView
+  intensity={75}
+  tint="light"
+  className="absolute inset-0"
+/>
+
+<View className="absolute inset-0 bg-[#00A83B]/75" />
+
+             
+
+              <View className="items-center justify-center px-6 py-3">
+                <Text className="text-[15px] text-white font-bold text-[#0B3D62]">
+                  Skip
+                </Text>
+              </View>
+
+            </View>
           </TouchableOpacity>
 
-          <View className="flex-row gap-1.5">
+
+          {/* ================= PAGINATION ================= */}
+
+          <View className="flex-row items-center gap-2">
+
             {slides.map((_, index) => (
               <View
                 key={index}
                 className={
                   index === activeIndex
-                    ? 'h-2 w-5 rounded-full bg-[#20A374]'
-                    : 'h-2 w-2 rounded-full bg-[#D9D9D9]'
+                    ? 'h-2.5 w-8 rounded-full bg-[#FF6A4D]/75'
+                    : 'h-2.5 w-2.5 rounded-full border border-white/70 bg-white/55'
                 }
               />
             ))}
+
           </View>
 
+
+          {/* ================= NEXT / GET STARTED ================= */}
+
           <TouchableOpacity
-            className="min-w-[100px] items-center rounded-[10px] bg-[#20A374] px-6 py-3"
+            activeOpacity={0.85}
             onPress={handleNext}
+            className="overflow-hidden rounded-[16px]"
           >
-            <Text className="text-[15px] font-semibold text-white">
-              {isLastSlide ? 'Get Started' : 'Next'}
-            </Text>
+            <View
+              className="
+                min-w-[90px]
+                overflow-hidden
+                rounded-[16px]
+                border
+                border-white/85
+              "
+            >
+
+           {/* Blur */}
+<BlurView
+  intensity={75}
+  tint="light"
+  className="absolute inset-0"
+/>
+
+{/* Blue glass background */}
+<View className="absolute inset-0 bg-[#0064D8]/70" />
+            
+
+             
+
+              <View className="items-center justify-center px-6 py-3">
+                <Text className="whitespace-nowrap text-[15px] font-bold text-white">
+                  {isLastSlide ? 'Get Started' : 'Next'}
+                </Text>
+              </View>
+
+            </View>
           </TouchableOpacity>
 
         </View>

@@ -6,15 +6,18 @@
     "orientation": "portrait",
     "scheme": "jodtod",
     "userInterfaceStyle": "automatic",
-
     "android": {
       "predictiveBackGestureEnabled": false,
       "package": "com.anonymous.app"
     },
-
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "plugins": [
+      "expo-image",
+      "expo-router",
+      "expo-asset"
+    ]
   }
 }
