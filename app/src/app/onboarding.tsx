@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   NativeSyntheticEvent,
   NativeScrollEvent,
+  ImageBackground,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 
@@ -45,12 +46,19 @@ export default function Onboarding() {
   const isLastSlide = activeIndex === slides.length - 1;
 
   const goToSlide = (index: number) => {
-    scrollRef.current?.scrollTo({ x: index * width, animated: true });
+    scrollRef.current?.scrollTo({
+      x: index * width,
+      animated: true,
+    });
     setActiveIndex(index);
   };
 
-  const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const index = Math.round(e.nativeEvent.contentOffset.x / width);
+  const handleScroll = (
+    e: NativeSyntheticEvent<NativeScrollEvent>
+  ) => {
+    const index = Math.round(
+      e.nativeEvent.contentOffset.x / width
+    );
     setActiveIndex(index);
   };
 
@@ -67,63 +75,80 @@ export default function Onboarding() {
   };
 
   return (
-    <View className="flex-1 bg-white">
-      <ScrollView
-        ref={scrollRef}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        onMomentumScrollEnd={handleScroll}
-      >
-        {slides.map((slide) => (
-          <View
-            key={slide.id}
-            style={{ width }}
-            className="flex-1 items-center justify-center px-7"
-          >
-            <Image
-              source={slide.image}
-              style={{ width: width * 0.85, height: width * 0.85 }}
-              className="mb-6"
-              resizeMode="contain"
-            />
-            <Text className="text-[22px] font-bold text-[#0B3D62] mb-3 text-center">
-              {slide.title}
-            </Text>
-            <Text className="text-sm text-[#666] text-center leading-[21px] px-2">
-              {slide.subtitle}
-            </Text>
-          </View>
-        ))}
-      </ScrollView>
+    <ImageBackground
+      source={require('../../assets/images/jodtod/background_onboarding.png')}
+      resizeMode="cover"
+      className="flex-1"
+    >
+      <View className="flex-1">
 
-      <View className="flex-row items-center justify-between px-7 pb-10 pt-4">
-        <TouchableOpacity onPress={handleSkip}>
-          <Text className="text-[15px] font-semibold text-[#20A374]">Skip</Text>
-        </TouchableOpacity>
-
-        <View className="flex-row gap-1.5">
-          {slides.map((_, index) => (
+        <ScrollView
+          ref={scrollRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          onMomentumScrollEnd={handleScroll}
+        >
+          {slides.map((slide) => (
             <View
-              key={index}
-              className={
-                index === activeIndex
-                  ? 'h-2 w-5 rounded-full bg-[#20A374]'
-                  : 'h-2 w-2 rounded-full bg-[#D9D9D9]'
-              }
-            />
+              key={slide.id}
+              style={{ width }}
+              className="flex-1 items-center justify-center px-7"
+            >
+              <Image
+                source={slide.image}
+                style={{
+                  width: width * 0.85,
+                  height: width * 0.85,
+                }}
+                className="mb-6"
+                resizeMode="contain"
+              />
+
+              <Text className="mb-3 text-center text-[22px] font-bold text-[#0B3D62]">
+                {slide.title}
+              </Text>
+
+              <Text className="px-2 text-center text-sm leading-[21px] text-[#666]">
+                {slide.subtitle}
+              </Text>
+            </View>
           ))}
+        </ScrollView>
+
+        <View className="flex-row items-center justify-between px-7 pb-10 pt-4">
+
+          <TouchableOpacity onPress={handleSkip}>
+            <Text className="text-[15px] font-semibold text-[#20A374]">
+              Skip
+            </Text>
+          </TouchableOpacity>
+
+          <View className="flex-row gap-1.5">
+            {slides.map((_, index) => (
+              <View
+                key={index}
+                className={
+                  index === activeIndex
+                    ? 'h-2 w-5 rounded-full bg-[#20A374]'
+                    : 'h-2 w-2 rounded-full bg-[#D9D9D9]'
+                }
+              />
+            ))}
+          </View>
+
+          <TouchableOpacity
+            className="min-w-[100px] items-center rounded-[10px] bg-[#20A374] px-6 py-3"
+            onPress={handleNext}
+          >
+            <Text className="text-[15px] font-semibold text-white">
+              {isLastSlide ? 'Get Started' : 'Next'}
+            </Text>
+          </TouchableOpacity>
+
         </View>
 
-        <TouchableOpacity
-          className="bg-[#20A374] py-3 px-6 rounded-[10px] min-w-[100px] items-center"
-          onPress={handleNext}
-        >
-          <Text className="text-white text-[15px] font-semibold">
-            {isLastSlide ? 'Get Started' : 'Next'}
-          </Text>
-        </TouchableOpacity>
       </View>
-    </View>
+    </ImageBackground>
   );
 }
