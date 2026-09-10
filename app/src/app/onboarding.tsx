@@ -9,9 +9,11 @@ import {
   NativeSyntheticEvent,
   NativeScrollEvent,
   ImageBackground,
+  StyleSheet,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const { width } = Dimensions.get('window');
 
@@ -130,31 +132,77 @@ export default function Onboarding() {
           <TouchableOpacity
             onPress={handleSkip}
             activeOpacity={0.85}
-            className="overflow-hidden rounded-[16px]"
+            className="overflow-hidden rounded-[16px] shadow-lg shadow-black/10"
           >
             <View
               className="
                 min-w-[80px]
                 overflow-hidden
                 rounded-[16px]
-                border
-                border-white/60
+                relative
               "
             >
 
-              {/* Blur */}
+              {/* Base frosted blur */}
               <BlurView
-  intensity={75}
-  tint="light"
-  className="absolute inset-0"
-/>
+                intensity={80}
+                tint="light"
+                className="absolute inset-0"
+              />
 
-<View className="absolute inset-0 bg-[#00A83B]/75" />
+              {/* Green glass tint */}
+              <View className="absolute inset-0 bg-[#00C853]/65 rounded-[16px]" />
 
-             
+              {/* Inner highlight - top edge */}
+              <LinearGradient
+                colors={['rgba(255,255,255,0.3)', 'rgba(255,255,255,0)']}
+                start={{ x: 0.5, y: 0 }}
+                end={{ x: 0.5, y: 1 }}
+                style={StyleSheet.absoluteFill}
+                locations={[0, 1]}
+              />
 
-              <View className="items-center justify-center px-6 py-3">
-                <Text className="text-[15px] text-white font-bold text-[#0B3D62]">
+              {/* Inner highlight - left edge */}
+              <LinearGradient
+                colors={['rgba(255,255,255,0.2)', 'rgba(255,255,255,0)']}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
+                style={StyleSheet.absoluteFill}
+                locations={[0, 1]}
+              />
+
+              {/* Inner shadow - bottom edge */}
+              <LinearGradient
+                colors={['rgba(0,0,0,0.15)', 'rgba(0,0,0,0)']}
+                start={{ x: 0.5, y: 1 }}
+                end={{ x: 0.5, y: 0 }}
+                style={StyleSheet.absoluteFill}
+                locations={[0, 1]}
+              />
+
+              {/* Inner shadow - right edge */}
+              <LinearGradient
+                colors={['rgba(0,0,0,0.1)', 'rgba(0,0,0,0)']}
+                start={{ x: 1, y: 0.5 }}
+                end={{ x: 0, y: 0.5 }}
+                style={StyleSheet.absoluteFill}
+                locations={[0, 1]}
+              />
+
+              {/* Border highlight - top */}
+              <View className="absolute top-0 left-0 right-0 h-0.5 bg-white/50 rounded-t-[16px]" />
+
+              {/* Border highlight - left */}
+              <View className="absolute top-0 left-0 w-0.5 h-full bg-white/40 rounded-l-[16px]" />
+
+              {/* Border shadow - bottom */}
+              <View className="absolute bottom-0 left-0 right-0 h-0.5 bg-black/10 rounded-b-[16px]" />
+
+              {/* Border shadow - right */}
+              <View className="absolute top-0 right-0 w-0.5 h-full bg-black/10 rounded-r-[16px]" />
+
+              <View className="relative z-10 items-center justify-center px-6 py-3">
+                <Text className="text-[15px] text-white font-bold">
                   Skip
                 </Text>
               </View>
@@ -172,7 +220,7 @@ export default function Onboarding() {
                 key={index}
                 className={
                   index === activeIndex
-                    ? 'h-2.5 w-8 rounded-full bg-[#FF6A4D]/75'
+                    ? 'h-2.5 w-8 rounded-full bg-[#00C853]/75'
                     : 'h-2.5 w-2.5 rounded-full border border-white/70 bg-white/55'
                 }
               />
@@ -181,37 +229,81 @@ export default function Onboarding() {
           </View>
 
 
-          {/* ================= NEXT / GET STARTED ================= */}
+{/* ================= NEXT / GET STARTED ================= */}
 
           <TouchableOpacity
             activeOpacity={0.85}
             onPress={handleNext}
-            className="overflow-hidden rounded-[16px]"
+            className="overflow-hidden rounded-[16px] shadow-lg shadow-black/10"
           >
             <View
               className="
                 min-w-[90px]
                 overflow-hidden
                 rounded-[16px]
-                border
-                border-white/85
+                relative
               "
             >
 
-           {/* Blur */}
-<BlurView
-  intensity={75}
-  tint="light"
-  className="absolute inset-0"
-/>
+              {/* Base frosted blur */}
+              <BlurView
+                intensity={80}
+                tint="light"
+                className="absolute inset-0"
+              />
 
-{/* Blue glass background */}
-<View className="absolute inset-0 bg-[#0064D8]/70" />
-            
+              {/* Blue glass tint */}
+              <View className="absolute inset-0 bg-[#0064D8]/65 rounded-[16px]" />
 
-             
+              {/* Inner highlight - top edge */}
+              <LinearGradient
+                colors={['rgba(255,255,255,0.3)', 'rgba(255,255,255,0)']}
+                start={{ x: 0.5, y: 0 }}
+                end={{ x: 0.5, y: 1 }}
+                style={StyleSheet.absoluteFill}
+                locations={[0, 1]}
+              />
 
-              <View className="items-center justify-center px-6 py-3">
+              {/* Inner highlight - left edge */}
+              <LinearGradient
+                colors={['rgba(255,255,255,0.2)', 'rgba(255,255,255,0)']}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
+                style={StyleSheet.absoluteFill}
+                locations={[0, 1]}
+              />
+
+              {/* Inner shadow - bottom edge */}
+              <LinearGradient
+                colors={['rgba(0,0,0,0.15)', 'rgba(0,0,0,0)']}
+                start={{ x: 0.5, y: 1 }}
+                end={{ x: 0.5, y: 0 }}
+                style={StyleSheet.absoluteFill}
+                locations={[0, 1]}
+              />
+
+              {/* Inner shadow - right edge */}
+              <LinearGradient
+                colors={['rgba(0,0,0,0.1)', 'rgba(0,0,0,0)']}
+                start={{ x: 1, y: 0.5 }}
+                end={{ x: 0, y: 0.5 }}
+                style={StyleSheet.absoluteFill}
+                locations={[0, 1]}
+              />
+
+              {/* Border highlight - top */}
+              <View className="absolute top-0 left-0 right-0 h-0.5 bg-white/50 rounded-t-[16px]" />
+
+              {/* Border highlight - left */}
+              <View className="absolute top-0 left-0 w-0.5 h-full bg-white/40 rounded-l-[16px]" />
+
+              {/* Border shadow - bottom */}
+              <View className="absolute bottom-0 left-0 right-0 h-0.5 bg-black/10 rounded-b-[16px]" />
+
+              {/* Border shadow - right */}
+              <View className="absolute top-0 right-0 w-0.5 h-full bg-black/10 rounded-r-[16px]" />
+
+              <View className="relative z-10 items-center justify-center px-6 py-3">
                 <Text className="whitespace-nowrap text-[15px] font-bold text-white">
                   {isLastSlide ? 'Get Started' : 'Next'}
                 </Text>
