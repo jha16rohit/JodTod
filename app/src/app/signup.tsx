@@ -1,229 +1,4 @@
-// import { useState } from 'react';
-// import {
-//   View,
-//   Text,
-//   TextInput,
-//   Image,
-//   TouchableOpacity,
-//   ScrollView,
-//   ImageBackground,
-// } from 'react-native';
-// import { useRouter } from 'expo-router';
-// import { Ionicons } from '@expo/vector-icons';
-
-// export default function Signup() {
-//   const router = useRouter();
-//   const [fullName, setFullName] = useState('');
-//   const [email, setEmail] = useState('');
-//   const [password, setPassword] = useState('');
-//   const [confirmPassword, setConfirmPassword] = useState('');
-//   const [showPassword, setShowPassword] = useState(false);
-//   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-//   const [agreedToTerms, setAgreedToTerms] = useState(false);
-
-//   return (
-//     <View className="flex-1 bg-white">
-//       <ScrollView showsVerticalScrollIndicator={false}>
-//         <ImageBackground
-//           source={require('../../assets/images/jodtod/plan-trips-login.png')}
-//           className="h-[260px] px-6 pt-[50px]"
-//           resizeMode="cover"
-//         >
-//           <TouchableOpacity
-//             className="w-10 h-10 rounded-full bg-white items-center justify-center mb-5"
-//             onPress={() => router.back()}
-//           >
-//             <Ionicons name="arrow-back" size={20} color="#0B3D62" />
-//           </TouchableOpacity>
-
-//           <Text className="text-2xl font-bold text-[#1a5d1b] mb-1.5">
-//            Create a profile
-//           </Text>
-//           <Text className="text-sm text-[#3A5468] leading-5">
-//             {/* Sign up to start planning trips{'\n'}and splitting expenses with friends */}
-//             Sign up to plan trips{'\n'} and split bills {'\n'}with friends.
-//           </Text>
-//         </ImageBackground>
-
-//         <View className="bg-white -mt-[30px] rounded-t-[28px] px-6 pt-8 pb-10">
-//           <Text
-//            className="text-2xl font-bold text-[#180a5c] mb-4"
-//            style={{ letterSpacing: 0.8 }}
-//              >
-//            Create your account
-//            </Text>
-
-//           <Text className="text-[13px] text-[#3A5468] mb-2 font-semibold">
-//             Full name
-//           </Text>
-//           <View className="flex-row items-center border border-[#E2E8EC] rounded-xl px-3.5 h-[52px] mb-[18px]">
-//             <Ionicons
-//               name="person-outline"
-//               size={18}
-//               color="#20A374"
-//               style={{ marginRight: 10 }}
-//             />
-//             <TextInput
-//               className="flex-1 text-sm text-[#0B3D62]"
-//               placeholder="Enter your full name"
-//               placeholderTextColor="#A0A0A0"
-//               value={fullName}
-//               onChangeText={setFullName}
-//               autoCapitalize="words"
-//             />
-//           </View>
-
-//           <Text className="text-[13px] text-[#3A5468] mb-2 font-semibold">
-//             Email address
-//           </Text>
-//           <View className="flex-row items-center border border-[#E2E8EC] rounded-xl px-3.5 h-[52px] mb-[18px]">
-//             <Ionicons
-//               name="mail-outline"
-//               size={18}
-//               color="#20A374"
-//               style={{ marginRight: 10 }}
-//             />
-//             <TextInput
-//               className="flex-1 text-sm text-[#0B3D62]"
-//               placeholder="Enter your email"
-//               placeholderTextColor="#A0A0A0"
-//               value={email}
-//               onChangeText={setEmail}
-//               keyboardType="email-address"
-//               autoCapitalize="none"
-//             />
-//           </View>
-
-//           <Text className="text-[13px] text-[#3A5468] mb-2 font-semibold">
-//             Password
-//           </Text>
-//           <View className="flex-row items-center border border-[#E2E8EC] rounded-xl px-3.5 h-[52px] mb-[18px]">
-//             <Ionicons
-//               name="lock-closed-outline"
-//               size={18}
-//               color="#20A374"
-//               style={{ marginRight: 10 }}
-//             />
-//             <TextInput
-//               className="flex-1 text-sm text-[#0B3D62]"
-//               placeholder="Create a password"
-//               placeholderTextColor="#A0A0A0"
-//               value={password}
-//               onChangeText={setPassword}
-//               secureTextEntry={!showPassword}
-//             />
-//             <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-//               <Ionicons
-//                 name={showPassword ? 'eye-outline' : 'eye-off-outline'}
-//                 size={18}
-//                 color="#888"
-//               />
-//             </TouchableOpacity>
-//           </View>
-
-//           <Text className="text-[13px] text-[#3A5468] mb-2 font-semibold">
-//             Confirm password
-//           </Text>
-//           <View className="flex-row items-center border border-[#E2E8EC] rounded-xl px-3.5 h-[52px] mb-[18px]">
-//             <Ionicons
-//               name="lock-closed-outline"
-//               size={18}
-//               color="#20A374"
-//               style={{ marginRight: 10 }}
-//             />
-//             <TextInput
-//               className="flex-1 text-sm text-[#0B3D62]"
-//               placeholder="Re-enter your password"
-//               placeholderTextColor="#A0A0A0"
-//               value={confirmPassword}
-//               onChangeText={setConfirmPassword}
-//               secureTextEntry={!showConfirmPassword}
-//             />
-//             <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
-//               <Ionicons
-//                 name={showConfirmPassword ? 'eye-outline' : 'eye-off-outline'}
-//                 size={18}
-//                 color="#888"
-//               />
-//             </TouchableOpacity>
-//           </View>
-
-//           <TouchableOpacity
-//             className="flex-row items-start mb-6"
-//             onPress={() => setAgreedToTerms(!agreedToTerms)}
-//           >
-//             <View
-//               className={
-//                 agreedToTerms
-//                   ? 'w-[18px] h-[18px] rounded-[5px] border-[1.5px] border-[#20A374] items-center justify-center mr-2.5 mt-0.5 bg-[#20A374]'
-//                   : 'w-[18px] h-[18px] rounded-[5px] border-[1.5px] border-[#20A374] items-center justify-center mr-2.5 mt-0.5'
-//               }
-//             >
-//               {agreedToTerms && <Ionicons name="checkmark" size={13} color="#fff" />}
-//             </View>
-//             <Text className="flex-1 text-[13px] text-[#3A5468] leading-[19px]">
-//               I agree to the{' '}
-//               <Text className="text-[#20A374] font-semibold">Terms of Service</Text> and{' '}
-//               <Text className="text-[#20A374] font-semibold">Privacy Policy</Text>
-//             </Text>
-//           </TouchableOpacity>
-
-//           <TouchableOpacity
-//             className="bg-[#1E8F6F] rounded-xl h-[52px] items-center justify-center mb-6"
-//             onPress={() => router.push('/(tabs)' as any)}
-//           >
-//             <Text className="text-white text-base font-bold">Sign Up</Text>
-//           </TouchableOpacity>
-
-//           <View className="flex-row items-center justify-center mb-4">
-//             {/* <Image
-//               source={require('../../assets/images/jodtod/jodtod-text.png')}
-//               className="w-[110px] h-8"
-//               resizeMode="contain"
-//             /> */}
-//           </View>
-
-//           <View className="flex-row items-center mb-5">
-//             <View className="flex-1 h-px bg-[#E2E8EC]" />
-//             <Text className="text-xs text-[#888] mx-3">or continue with</Text>
-//             <View className="flex-1 h-px bg-[#E2E8EC]" />
-//           </View>
-
-//           <View className="flex-row gap-3 mb-6">
-//             <TouchableOpacity className="flex-1 flex-row items-center justify-center border border-[#E2E8EC] rounded-xl h-12 gap-2">
-//               <Ionicons name="logo-google" size={18} color="#DB4437" />
-//               <Text className="text-sm font-semibold text-[#0B3D62]">Google</Text>
-//             </TouchableOpacity>
-//             <TouchableOpacity className="flex-1 flex-row items-center justify-center border border-[#E2E8EC] rounded-xl h-12 gap-2">
-//               <Ionicons name="logo-apple" size={20} color="#000" />
-//               <Text className="text-sm font-semibold text-[#0B3D62]">Apple</Text>
-//             </TouchableOpacity>
-//           </View>
-
-//           <View className="flex-row justify-center mb-6">
-//             <Text className="text-[13px] text-[#3A5468]">
-//               Already have an account?{' '}
-//             </Text>
-//             <TouchableOpacity onPress={() => router.push('/login')}>
-//               <Text className="text-[13px] text-[#20A374] font-bold">Login</Text>
-//             </TouchableOpacity>
-//           </View>
-
-//           {/* <View className="flex-row bg-[#EAF6F1] rounded-2xl p-3.5 items-start gap-3">
-//             <View className="w-[34px] h-[34px] rounded-full bg-white items-center justify-center">
-//               <Ionicons name="shield-checkmark" size={20} color="#20A374" />
-//             </View>
-//             <View className="flex-1">
-          
-//             </View> */}
-//           {/* </View> */}
-//         </View>
-//       </ScrollView>
-//     </View>
-//   );
-// }
-
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   View,
   Text,
@@ -231,90 +6,225 @@ import {
   TouchableOpacity,
   ScrollView,
   ImageBackground,
+  Image,
+  Dimensions,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
-// Same "liquid glass" palette as login.tsx
-const GLOW_FROM = '#2DD4BF'; // teal
-const GLOW_TO = '#8B5CF6'; // violet
-const CTA_FROM = '#14B8A6'; // teal
-const CTA_TO = '#0D9488'; // deep teal
-const GLASS_BG = 'rgba(255,255,255,0.55)';
-const GLASS_BG_STRONG = 'rgba(255,255,255,0.75)';
+const { width: SCREEN_W } = Dimensions.get('window');
+
+// ---------------------------------------------------------------------------
+// Palette — matches the restyled login.tsx
+// ---------------------------------------------------------------------------
+
+const GLOW_FROM = '#2DD4BF';
+const GLOW_TO = '#8B5CF6';
+
+const BRAND_GREEN_LIGHT = '#22D48A';
+const BRAND_GREEN = '#12B57A';
+const BRAND_GREEN_DARK = '#0E9F6E';
+
 const TEXT_DARK = '#14212B';
 const TEXT_MUTED = '#4B5A66';
 
-function GlowBorder({
+const HEADER_TITLE = '#0B3D62';
+const HEADER_SUB = '#2A5A82';
+
+const INPUT_BG = 'rgba(255,255,255,0.38)';
+const INPUT_BORDER = 'rgba(255,255,255,0.6)';
+
+// ---------------------------------------------------------------------------
+// Glass card — blurred and translucent so the bubble background's own color
+// shows through it, instead of reading as a flat white box
+// ---------------------------------------------------------------------------
+
+function GlassCard({
   children,
-  radius = 14,
-  borderWidth = 1.4,
+  radius = 28,
   style,
-  glow = true,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   radius?: number;
-  borderWidth?: number;
   style?: any;
-  glow?: boolean;
 }) {
   return (
-    <LinearGradient
-      colors={[GLOW_FROM, GLOW_TO]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
+    <View
       style={[
-        { borderRadius: radius, padding: borderWidth },
-        glow
-          ? {
-              shadowColor: GLOW_TO,
-              shadowOpacity: 0.35,
-              shadowRadius: 8,
-              shadowOffset: { width: 0, height: 0 },
-              elevation: 5,
-            }
-          : null,
+        {
+          borderRadius: radius,
+          borderWidth: 1,
+          borderColor: 'rgba(255,255,255,0.5)',
+          shadowColor: '#5FA8B4',
+          shadowOpacity: 0.25,
+          shadowRadius: 24,
+          shadowOffset: { width: 0, height: 10 },
+          elevation: 10,
+          overflow: 'hidden',
+        },
         style,
       ]}
     >
-      <View style={{ borderRadius: radius - borderWidth, overflow: 'hidden' }}>
-        {children}
-      </View>
-    </LinearGradient>
+      <BlurView intensity={35} tint="light" style={{ borderRadius: radius }}>
+        <View style={{ backgroundColor: 'rgba(255,255,255,0.16)' }}>{children}</View>
+      </BlurView>
+    </View>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Simple pill input — translucent fill so it sits as a layer on the glass card
+// ---------------------------------------------------------------------------
+
+function GlassInput({
+  children,
+  style,
+}: {
+  children: ReactNode;
+  style?: any;
+}) {
+  return (
+    <View
+      style={[
+        {
+          borderRadius: 16,
+          backgroundColor: INPUT_BG,
+          borderWidth: 1,
+          borderColor: INPUT_BORDER,
+          overflow: 'hidden',
+        },
+        style,
+      ]}
+    >
+      {children}
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Gradient CTA — solid vivid green pill with trailing arrow
+// ---------------------------------------------------------------------------
 
 function GradientCTA({
   children,
   onPress,
   disabled,
-  radius = 14,
+  radius = 28,
+  icon = 'arrow-forward',
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   onPress?: () => void;
   disabled?: boolean;
   radius?: number;
+  icon?: keyof typeof Ionicons.glyphMap | null;
 }) {
   return (
-    <GlowBorder radius={radius} borderWidth={1.4} glow={!disabled}>
-      <TouchableOpacity onPress={onPress} disabled={disabled} activeOpacity={0.85}>
-        <LinearGradient
-          colors={disabled ? ['#D8DEE3', '#C6CDD3'] : [CTA_FROM, CTA_TO]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={{ height: 52, alignItems: 'center', justifyContent: 'center' }}
-        >
-          {children}
-        </LinearGradient>
-      </TouchableOpacity>
-    </GlowBorder>
+    <TouchableOpacity
+      onPress={onPress}
+      disabled={disabled}
+      activeOpacity={0.9}
+      style={{
+        borderRadius: radius,
+        shadowColor: disabled ? 'transparent' : BRAND_GREEN,
+        shadowOpacity: disabled ? 0 : 0.35,
+        shadowRadius: 14,
+        shadowOffset: { width: 0, height: 8 },
+        elevation: disabled ? 0 : 6,
+      }}
+    >
+      <LinearGradient
+        colors={
+          disabled
+            ? ['#D7E0E0', '#C7D2D2']
+            : [BRAND_GREEN_LIGHT, BRAND_GREEN, BRAND_GREEN_DARK]
+        }
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={{
+          height: 54,
+          borderRadius: radius,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 8,
+        }}
+      >
+        {children}
+        {icon ? (
+          <Ionicons
+            name={icon}
+            size={18}
+            color={disabled ? TEXT_MUTED : '#FFFFFF'}
+          />
+        ) : null}
+      </LinearGradient>
+    </TouchableOpacity>
   );
 }
 
+// ---------------------------------------------------------------------------
+// Full-bleed bubble backdrop (same asset & treatment as login.tsx)
+// ---------------------------------------------------------------------------
+
+function BubbleBackdrop({ children }: { children: ReactNode }) {
+  return (
+    <ImageBackground
+      source={require('../../assets/images/jodtod/background_onboarding.png')}
+      resizeMode="cover"
+      style={{ flex: 1, width: SCREEN_W }}
+    >
+      {children}
+    </ImageBackground>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Header photo — the new split-expenses illustration, given a little extra
+// height and vertical breathing room, plus a light blend at the very bottom
+// so it settles into the card instead of cutting off sharply
+// ---------------------------------------------------------------------------
+
+function HeaderVisual({ height }: { height: number }) {
+  return (
+    <View style={{ width: SCREEN_W, height, overflow: 'hidden' }}>
+      <Image
+        source={require('../../assets/images/jodtod/split-expenses.png')}
+        style={{
+          position: 'absolute',
+          top: -10,
+          left: 0,
+          width: SCREEN_W,
+          height: '110%',
+        }}
+        resizeMode="cover"
+      />
+
+      {/* Soft blend into the card below — light, not a wash */}
+      <LinearGradient
+        colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.5)']}
+        locations={[0.8, 1] as any}
+        pointerEvents="none"
+        style={{
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: '24%',
+        }}
+      />
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Signup screen
+// ---------------------------------------------------------------------------
+
 export default function Signup() {
   const router = useRouter();
+
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -324,253 +234,262 @@ export default function Signup() {
   const [agreedToTerms, setAgreedToTerms] = useState(false);
 
   return (
-    <View className="flex-1" style={{ backgroundColor: '#FFFFFF' }}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <ImageBackground
-          source={require('../../assets/images/jodtod/plan-trips-login.png')}
-          className="h-[300px] px-6 pt-[50px]"
-          resizeMode="cover"
+    <View className="flex-1">
+      <BubbleBackdrop>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 40, flexGrow: 1 }}
         >
-          <LinearGradient
-            colors={['rgba(255,255,255,0.05)', 'rgba(255,255,255,0.55)']}
-            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-          />
+          {/* Header — full bleed photo, given a bit more height for the new art */}
+          <View style={{ position: 'relative', width: SCREEN_W }}>
+            <HeaderVisual height={370} />
 
-          <TouchableOpacity
-            className="w-10 h-10 rounded-full items-center justify-center mb-5"
-            style={{ backgroundColor: 'rgba(255,255,255,0.85)' }}
-            onPress={() => router.back()}
-          >
-            <Ionicons name="arrow-back" size={20} color={CTA_TO} />
-          </TouchableOpacity>
-
-          <Text
-            className="text-[28px] font-extrabold text-white mb-2"
-            style={{
-              letterSpacing: 0.3,
-              textShadowColor: 'rgba(0,0,0,0.35)',
-              textShadowOffset: { width: 0, height: 2 },
-              textShadowRadius: 8,
-            }}
-          >
-            Create a <Text style={{ color: GLOW_FROM }}>profile</Text>
-          </Text>
-          <Text
-            className="text-[15px] text-white/90 leading-6"
-            style={{
-              letterSpacing: 0.2,
-              textShadowColor: 'rgba(0,0,0,0.3)',
-              textShadowOffset: { width: 0, height: 1 },
-              textShadowRadius: 6,
-            }}
-          >
-            Sign up to plan trips{'\n'}and split bills with friends.
-          </Text>
-        </ImageBackground>
-
-        {/* Glass card, overlapping the header image */}
-        <View style={{ marginTop: -40 }}>
-          <LinearGradient
-            colors={[GLOW_FROM, GLOW_TO]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={{ height: 2, marginHorizontal: 24, borderRadius: 2, opacity: 0.9 }}
-          />
-          <BlurView
-            intensity={50}
-            tint="light"
-            style={{
-              borderBottomLeftRadius: 28,
-              borderBottomRightRadius: 28,
-              overflow: 'hidden',
-            }}
-          >
+            {/* Back button only — overlay title/subtitle stay removed */}
             <View
-              className="px-6 pt-8 pb-10"
-              style={{ backgroundColor: GLASS_BG_STRONG }}
+              style={{
+                position: 'absolute',
+                top: 54,
+                left: 18,
+              }}
             >
-              <Text
-                className="text-2xl font-bold mb-4"
-                style={{ letterSpacing: 0.6, color: TEXT_DARK }}
-              >
-                Create your account
-              </Text>
-
-              <Text className="text-[13px] mb-2 font-semibold" style={{ color: TEXT_MUTED }}>
-                Full name
-              </Text>
-              <GlowBorder radius={14} borderWidth={1.2} glow={false} style={{ marginBottom: 18 }}>
-                <View
-                  className="flex-row items-center px-3.5 h-[52px]"
-                  style={{ backgroundColor: GLASS_BG }}
-                >
-                  <Ionicons name="person-outline" size={18} color={CTA_TO} style={{ marginRight: 10 }} />
-                  <TextInput
-                    className="flex-1 text-sm"
-                    style={{ color: TEXT_DARK }}
-                    placeholder="Enter your full name"
-                    placeholderTextColor="rgba(20,33,43,0.4)"
-                    value={fullName}
-                    onChangeText={setFullName}
-                    autoCapitalize="words"
-                  />
-                </View>
-              </GlowBorder>
-
-              <Text className="text-[13px] mb-2 font-semibold" style={{ color: TEXT_MUTED }}>
-                Email address
-              </Text>
-              <GlowBorder radius={14} borderWidth={1.2} glow={false} style={{ marginBottom: 18 }}>
-                <View
-                  className="flex-row items-center px-3.5 h-[52px]"
-                  style={{ backgroundColor: GLASS_BG }}
-                >
-                  <Ionicons name="mail-outline" size={18} color={CTA_TO} style={{ marginRight: 10 }} />
-                  <TextInput
-                    className="flex-1 text-sm"
-                    style={{ color: TEXT_DARK }}
-                    placeholder="Enter your email"
-                    placeholderTextColor="rgba(20,33,43,0.4)"
-                    value={email}
-                    onChangeText={setEmail}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                  />
-                </View>
-              </GlowBorder>
-
-              <Text className="text-[13px] mb-2 font-semibold" style={{ color: TEXT_MUTED }}>
-                Password
-              </Text>
-              <GlowBorder radius={14} borderWidth={1.2} glow={false} style={{ marginBottom: 18 }}>
-                <View
-                  className="flex-row items-center px-3.5 h-[52px]"
-                  style={{ backgroundColor: GLASS_BG }}
-                >
-                  <Ionicons name="lock-closed-outline" size={18} color={CTA_TO} style={{ marginRight: 10 }} />
-                  <TextInput
-                    className="flex-1 text-sm"
-                    style={{ color: TEXT_DARK }}
-                    placeholder="Create a password"
-                    placeholderTextColor="rgba(20,33,43,0.4)"
-                    value={password}
-                    onChangeText={setPassword}
-                    secureTextEntry={!showPassword}
-                  />
-                  <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                    <Ionicons
-                      name={showPassword ? 'eye-outline' : 'eye-off-outline'}
-                      size={18}
-                      color={TEXT_MUTED}
-                    />
-                  </TouchableOpacity>
-                </View>
-              </GlowBorder>
-
-              <Text className="text-[13px] mb-2 font-semibold" style={{ color: TEXT_MUTED }}>
-                Confirm password
-              </Text>
-              <GlowBorder radius={14} borderWidth={1.2} glow={false} style={{ marginBottom: 18 }}>
-                <View
-                  className="flex-row items-center px-3.5 h-[52px]"
-                  style={{ backgroundColor: GLASS_BG }}
-                >
-                  <Ionicons name="lock-closed-outline" size={18} color={CTA_TO} style={{ marginRight: 10 }} />
-                  <TextInput
-                    className="flex-1 text-sm"
-                    style={{ color: TEXT_DARK }}
-                    placeholder="Re-enter your password"
-                    placeholderTextColor="rgba(20,33,43,0.4)"
-                    value={confirmPassword}
-                    onChangeText={setConfirmPassword}
-                    secureTextEntry={!showConfirmPassword}
-                  />
-                  <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
-                    <Ionicons
-                      name={showConfirmPassword ? 'eye-outline' : 'eye-off-outline'}
-                      size={18}
-                      color={TEXT_MUTED}
-                    />
-                  </TouchableOpacity>
-                </View>
-              </GlowBorder>
-
               <TouchableOpacity
-                className="flex-row items-start mb-6"
-                onPress={() => setAgreedToTerms(!agreedToTerms)}
+                className="w-10 h-10 rounded-full items-center justify-center"
+                style={{
+                  backgroundColor: 'rgba(255,255,255,0.85)',
+                  shadowColor: '#000',
+                  shadowOpacity: 0.15,
+                  shadowRadius: 8,
+                  shadowOffset: { width: 0, height: 2 },
+                  elevation: 3,
+                }}
+                onPress={() => router.back()}
               >
-                <View
-                  style={{
-                    width: 18,
-                    height: 18,
-                    borderRadius: 5,
-                    borderWidth: 1.4,
-                    borderColor: CTA_TO,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginRight: 10,
-                    marginTop: 2,
-                    backgroundColor: agreedToTerms ? CTA_FROM : 'transparent',
-                  }}
-                >
-                  {agreedToTerms && <Ionicons name="checkmark" size={13} color="#fff" />}
-                </View>
-                <Text className="flex-1 text-[13px] leading-[19px]" style={{ color: TEXT_MUTED }}>
-                  I agree to the{' '}
-                  <Text className="font-semibold" style={{ color: GLOW_TO }}>Terms of Service</Text> and{' '}
-                  <Text className="font-semibold" style={{ color: GLOW_TO }}>Privacy Policy</Text>
-                </Text>
+                <Ionicons name="arrow-back" size={20} color={BRAND_GREEN_DARK} />
               </TouchableOpacity>
+            </View>
+          </View>
 
-              <View style={{ marginBottom: 24 }}>
-                <GradientCTA onPress={() => router.push('/(tabs)' as any)}>
-                  <Text className="text-white text-base font-bold">Sign Up</Text>
-                </GradientCTA>
-              </View>
-
-              <View className="flex-row items-center mb-5">
-                <View className="flex-1 h-px" style={{ backgroundColor: 'rgba(20,33,43,0.12)' }} />
-                <Text className="text-xs mx-3" style={{ color: TEXT_MUTED }}>
-                  or continue with
+          {/* Glass signup card, floated up slightly over the photo */}
+          <View style={{ marginTop: -28, marginHorizontal: 18 }}>
+            <GlassCard radius={28}>
+              <View className="px-6 pt-7 pb-8">
+                <Text
+                  className="text-2xl font-bold mb-5"
+                  style={{ letterSpacing: 0.4, color: TEXT_DARK }}
+                >
+                  Create your account
                 </Text>
-                <View className="flex-1 h-px" style={{ backgroundColor: 'rgba(20,33,43,0.12)' }} />
-              </View>
 
-              <View className="flex-row gap-3 mb-6">
-                <GlowBorder radius={12} borderWidth={1.2} glow={false} style={{ flex: 1 }}>
-                  <TouchableOpacity
-                    className="flex-row items-center justify-center h-12 gap-2"
-                    style={{ backgroundColor: GLASS_BG }}
-                  >
-                    <Ionicons name="logo-google" size={18} color="#DB4437" />
-                    <Text className="text-sm font-semibold" style={{ color: TEXT_DARK }}>Google</Text>
-                  </TouchableOpacity>
-                </GlowBorder>
-                <GlowBorder radius={12} borderWidth={1.2} glow={false} style={{ flex: 1 }}>
-                  <TouchableOpacity
-                    className="flex-row items-center justify-center h-12 gap-2"
-                    style={{ backgroundColor: GLASS_BG }}
-                  >
-                    <Ionicons name="logo-apple" size={20} color={TEXT_DARK} />
-                    <Text className="text-sm font-semibold" style={{ color: TEXT_DARK }}>Apple</Text>
-                  </TouchableOpacity>
-                </GlowBorder>
-              </View>
-
-              <View className="flex-row justify-center mb-2">
-                <Text className="text-[13px]" style={{ color: TEXT_MUTED }}>
-                  Already have an account?{' '}
+                {/* Full name */}
+                <Text className="text-[13px] mb-2 font-semibold" style={{ color: TEXT_MUTED }}>
+                  Full name
                 </Text>
-                <TouchableOpacity onPress={() => router.push('/login')}>
-                  <Text className="text-[13px] font-bold" style={{ color: GLOW_TO }}>
-                    Login
+                <GlassInput style={{ marginBottom: 18 }}>
+                  <View className="flex-row items-center px-3.5 h-[52px]">
+                    <Ionicons
+                      name="person-outline"
+                      size={18}
+                      color={BRAND_GREEN_DARK}
+                      style={{ marginRight: 10 }}
+                    />
+                    <TextInput
+                      className="flex-1 text-sm"
+                      style={{ color: TEXT_DARK }}
+                      placeholder="Enter your full name"
+                      placeholderTextColor="rgba(20,33,43,0.4)"
+                      value={fullName}
+                      onChangeText={setFullName}
+                      autoCapitalize="words"
+                    />
+                  </View>
+                </GlassInput>
+
+                {/* Email */}
+                <Text className="text-[13px] mb-2 font-semibold" style={{ color: TEXT_MUTED }}>
+                  Email address
+                </Text>
+                <GlassInput style={{ marginBottom: 18 }}>
+                  <View className="flex-row items-center px-3.5 h-[52px]">
+                    <Ionicons
+                      name="mail-outline"
+                      size={18}
+                      color={BRAND_GREEN_DARK}
+                      style={{ marginRight: 10 }}
+                    />
+                    <TextInput
+                      className="flex-1 text-sm"
+                      style={{ color: TEXT_DARK }}
+                      placeholder="Enter your email"
+                      placeholderTextColor="rgba(20,33,43,0.4)"
+                      value={email}
+                      onChangeText={setEmail}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                    />
+                  </View>
+                </GlassInput>
+
+                {/* Password */}
+                <Text className="text-[13px] mb-2 font-semibold" style={{ color: TEXT_MUTED }}>
+                  Password
+                </Text>
+                <GlassInput style={{ marginBottom: 18 }}>
+                  <View className="flex-row items-center px-3.5 h-[52px]">
+                    <Ionicons
+                      name="lock-closed-outline"
+                      size={18}
+                      color={BRAND_GREEN_DARK}
+                      style={{ marginRight: 10 }}
+                    />
+                    <TextInput
+                      className="flex-1 text-sm"
+                      style={{ color: TEXT_DARK }}
+                      placeholder="Create a password"
+                      placeholderTextColor="rgba(20,33,43,0.4)"
+                      value={password}
+                      onChangeText={setPassword}
+                      secureTextEntry={!showPassword}
+                    />
+                    <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                      <Ionicons
+                        name={showPassword ? 'eye-outline' : 'eye-off-outline'}
+                        size={18}
+                        color={TEXT_MUTED}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                </GlassInput>
+
+                {/* Confirm password */}
+                <Text className="text-[13px] mb-2 font-semibold" style={{ color: TEXT_MUTED }}>
+                  Confirm password
+                </Text>
+                <GlassInput style={{ marginBottom: 18 }}>
+                  <View className="flex-row items-center px-3.5 h-[52px]">
+                    <Ionicons
+                      name="lock-closed-outline"
+                      size={18}
+                      color={BRAND_GREEN_DARK}
+                      style={{ marginRight: 10 }}
+                    />
+                    <TextInput
+                      className="flex-1 text-sm"
+                      style={{ color: TEXT_DARK }}
+                      placeholder="Re-enter your password"
+                      placeholderTextColor="rgba(20,33,43,0.4)"
+                      value={confirmPassword}
+                      onChangeText={setConfirmPassword}
+                      secureTextEntry={!showConfirmPassword}
+                    />
+                    <TouchableOpacity
+                      onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                    >
+                      <Ionicons
+                        name={showConfirmPassword ? 'eye-outline' : 'eye-off-outline'}
+                        size={18}
+                        color={TEXT_MUTED}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                </GlassInput>
+
+                {/* Terms */}
+                <TouchableOpacity
+                  className="flex-row items-start mb-6"
+                  onPress={() => setAgreedToTerms(!agreedToTerms)}
+                >
+                  <View
+                    style={{
+                      width: 18,
+                      height: 18,
+                      borderRadius: 5,
+                      borderWidth: 1.4,
+                      borderColor: BRAND_GREEN_DARK,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      marginRight: 10,
+                      marginTop: 2,
+                      backgroundColor: agreedToTerms ? BRAND_GREEN : 'transparent',
+                    }}
+                  >
+                    {agreedToTerms && <Ionicons name="checkmark" size={13} color="#fff" />}
+                  </View>
+                  <Text className="flex-1 text-[13px] leading-[19px]" style={{ color: TEXT_MUTED }}>
+                    I agree to the{' '}
+                    <Text className="font-semibold" style={{ color: GLOW_TO }}>
+                      Terms of Service
+                    </Text>{' '}
+                    and{' '}
+                    <Text className="font-semibold" style={{ color: GLOW_TO }}>
+                      Privacy Policy
+                    </Text>
                   </Text>
                 </TouchableOpacity>
+
+                <View style={{ marginBottom: 24 }}>
+                  <GradientCTA onPress={() => router.push('/(tabs)' as any)}>
+                    <Text className="text-white text-base font-bold">Sign Up</Text>
+                  </GradientCTA>
+                </View>
+
+                {/* Divider */}
+                <View className="flex-row items-center mb-5">
+                  <View className="flex-1 h-px" style={{ backgroundColor: 'rgba(20,33,43,0.14)' }} />
+                  <Text className="text-xs mx-3" style={{ color: TEXT_MUTED }}>
+                    or continue with
+                  </Text>
+                  <View className="flex-1 h-px" style={{ backgroundColor: 'rgba(20,33,43,0.14)' }} />
+                </View>
+
+                {/* Social buttons */}
+                <View className="flex-row gap-3 mb-6">
+                  <TouchableOpacity
+                    className="flex-1 flex-row items-center justify-center h-12 gap-2"
+                    style={{
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      borderColor: INPUT_BORDER,
+                      backgroundColor: 'rgba(255,255,255,0.45)',
+                    }}
+                  >
+                    <Ionicons name="logo-google" size={18} color="#DB4437" />
+                    <Text className="text-sm font-semibold" style={{ color: TEXT_DARK }}>
+                      Google
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    className="flex-1 flex-row items-center justify-center h-12 gap-2"
+                    style={{
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      borderColor: INPUT_BORDER,
+                      backgroundColor: 'rgba(255,255,255,0.45)',
+                    }}
+                  >
+                    <Ionicons name="logo-apple" size={20} color={TEXT_DARK} />
+                    <Text className="text-sm font-semibold" style={{ color: TEXT_DARK }}>
+                      Apple
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Login link */}
+                <View className="flex-row justify-center mb-2">
+                  <Text className="text-[13px]" style={{ color: TEXT_MUTED }}>
+                    Already have an account?{' '}
+                  </Text>
+                  <TouchableOpacity onPress={() => router.push('/login')}>
+                    <Text className="text-[13px] font-bold" style={{ color: GLOW_TO }}>
+                      Login
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
-          </BlurView>
-        </View>
-      </ScrollView>
+            </GlassCard>
+          </View>
+        </ScrollView>
+      </BubbleBackdrop>
     </View>
   );
 }
