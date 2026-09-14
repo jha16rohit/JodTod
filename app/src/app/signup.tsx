@@ -279,7 +279,7 @@ function HeaderVisual({ height }: { height: number }) {
   return (
     <View style={{ width: SCREEN_W, height, overflow: 'hidden' }}>
       <Image
-        source={require('../../assets/images/jodtod/split-expenses.png')}
+        source={require('../../assets/images/jodtod/tip.png')}
         style={{
           position: 'absolute',
           top: -10,
