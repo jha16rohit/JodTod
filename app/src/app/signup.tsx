@@ -325,6 +325,31 @@ export default function Signup() {
   return (
     <View className="flex-1">
       <BubbleBackdrop>
+        {/* Fixed back button — sits outside ScrollView so it never scrolls away */}
+        <View
+          style={{
+            position: 'absolute',
+            top: 54,
+            left: 18,
+            zIndex: 10,
+          }}
+        >
+          <TouchableOpacity
+            className="w-10 h-10 rounded-full items-center justify-center"
+            style={{
+              backgroundColor: 'rgba(255,255,255,0.85)',
+              shadowColor: '#000',
+              shadowOpacity: 0.15,
+              shadowRadius: 8,
+              shadowOffset: { width: 0, height: 2 },
+              elevation: 3,
+            }}
+            onPress={() => router.back()}
+          >
+            <Ionicons name="arrow-back" size={20} color={BRAND_GREEN_DARK} />
+          </TouchableOpacity>
+        </View>
+
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 40, flexGrow: 1 }}
@@ -332,30 +357,6 @@ export default function Signup() {
           {/* Header — full bleed photo, given a bit more height for the art */}
           <View style={{ position: 'relative', width: SCREEN_W }}>
             <HeaderVisual height={370} />
-
-            {/* Back button only — overlay title/subtitle stay removed */}
-            <View
-              style={{
-                position: 'absolute',
-                top: 54,
-                left: 18,
-              }}
-            >
-              <TouchableOpacity
-                className="w-10 h-10 rounded-full items-center justify-center"
-                style={{
-                  backgroundColor: 'rgba(255,255,255,0.85)',
-                  shadowColor: '#000',
-                  shadowOpacity: 0.15,
-                  shadowRadius: 8,
-                  shadowOffset: { width: 0, height: 2 },
-                  elevation: 3,
-                }}
-                onPress={() => router.back()}
-              >
-                <Ionicons name="arrow-back" size={20} color={BRAND_GREEN_DARK} />
-              </TouchableOpacity>
-            </View>
           </View>
 
           {/* Glass signup card, floated up slightly over the photo */}
