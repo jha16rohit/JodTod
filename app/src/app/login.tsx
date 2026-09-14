@@ -17,6 +17,7 @@ import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import Svg, { Path } from 'react-native-svg';
 
 const OTP_LENGTH = 6;
 const RESEND_SECONDS = 30;
@@ -28,9 +29,9 @@ type Step = 'form' | 'otp' | 'verifying' | 'verified';
 // Palette — clean white card, single vivid green accent, no heavy tinted glass
 // ---------------------------------------------------------------------------
 
-const BRAND_GREEN_LIGHT = '#22D48A';
-const BRAND_GREEN = '#12B57A';
-const BRAND_GREEN_DARK = '#0E9F6E';
+const BRAND_GREEN_LIGHT = '#00E6A8';
+const BRAND_GREEN = '#00B894';
+const BRAND_GREEN_DARK = '#00896B';
 
 const TEXT_DARK = '#14212B';
 const TEXT_MUTED = '#4B5A66';
@@ -38,8 +39,9 @@ const TEXT_MUTED = '#4B5A66';
 const HEADER_TITLE = '#0B3D62';
 const HEADER_SUB = '#2A5A82';
 
-const INPUT_BG = 'rgba(255,255,255,0.38)';
-const INPUT_BORDER = 'rgba(255,255,255,0.6)';
+// Lowered from 0.38 / 0.6 so the bubble background tints through the inputs
+const INPUT_BG = 'rgba(255,255,255,0.18)';
+const INPUT_BORDER = 'rgba(255,255,255,0.45)';
 
 // ---------------------------------------------------------------------------
 // Glass card — blurred and translucent so the bubble background's own color
@@ -61,7 +63,7 @@ function GlassCard({
         {
           borderRadius: radius,
           borderWidth: 1,
-          borderColor: 'rgba(255,255,255,0.5)',
+          borderColor: 'rgba(255,255,255,0.35)',
           shadowColor: '#5FA8B4',
           shadowOpacity: 0.25,
           shadowRadius: 24,
@@ -72,8 +74,26 @@ function GlassCard({
         style,
       ]}
     >
-      <BlurView intensity={35} tint="light" style={{ borderRadius: radius }}>
-        <View style={{ backgroundColor: 'rgba(255,255,255,0.16)' }}>{children}</View>
+      {/*
+        Plain BlurView on Android silently ignores `intensity` unless you
+        pass experimentalBlurMethod — without it Android renders a flat
+        solid tint instead of an actual blur, which is why the card kept
+        looking white no matter how low intensity was dropped.
+      */}
+      <BlurView
+        intensity={14}
+        tint="light"
+        experimentalBlurMethod="dimezisBlurView"
+        style={{ borderRadius: radius }}
+      >
+        {/* soft sky/green tint instead of flat white so bubbles read through in color, not just grey */}
+        <LinearGradient
+          colors={['rgba(255,255,255,0.10)', 'rgba(210,240,230,0.08)']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        >
+          {children}
+        </LinearGradient>
       </BlurView>
     </View>
   );
@@ -112,11 +132,14 @@ function GlassInput({
 // Gradient CTA — solid vivid green pill with trailing arrow
 // ---------------------------------------------------------------------------
 
+const CTA_HEIGHT = 54;
+const CTA_RADIUS = CTA_HEIGHT / 2; // full capsule pill, matches reference "Log In" / "Create Account" buttons
+
 function GradientCTA({
   children,
   onPress,
   disabled,
-  radius = 28,
+  radius = CTA_RADIUS,
   icon = 'arrow-forward',
 }: {
   children: ReactNode;
@@ -133,10 +156,10 @@ function GradientCTA({
       style={{
         borderRadius: radius,
         shadowColor: disabled ? 'transparent' : BRAND_GREEN,
-        shadowOpacity: disabled ? 0 : 0.35,
-        shadowRadius: 14,
+        shadowOpacity: disabled ? 0 : 0.45,
+        shadowRadius: 16,
         shadowOffset: { width: 0, height: 8 },
-        elevation: disabled ? 0 : 6,
+        elevation: disabled ? 0 : 8,
       }}
     >
       <LinearGradient
@@ -148,7 +171,7 @@ function GradientCTA({
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
         style={{
-          height: 54,
+          height: CTA_HEIGHT,
           borderRadius: radius,
           flexDirection: 'row',
           alignItems: 'center',
@@ -165,6 +188,72 @@ function GradientCTA({
           />
         ) : null}
       </LinearGradient>
+    </TouchableOpacity>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Real multicolor Google "G" mark — Ionicons' logo-google is flat single-color,
+// which is why it didn't match the reference. This is the actual 4-color G.
+// ---------------------------------------------------------------------------
+
+function GoogleGlyph({ size = 18 }: { size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 48 48">
+      <Path
+        fill="#EA4335"
+        d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
+      />
+      <Path
+        fill="#4285F4"
+        d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.9-2.26 5.36-4.78 7.02l7.73 6c4.51-4.18 7.09-10.36 7.09-17.49z"
+      />
+      <Path
+        fill="#FBBC05"
+        d="M10.53 28.59A14.5 14.5 0 0 1 9.5 24c0-1.59.27-3.13.76-4.59l-7.98-6.19A24 24 0 0 0 0 24c0 3.86.92 7.51 2.56 10.78l7.97-6.19z"
+      />
+      <Path
+        fill="#34A853"
+        d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.9l-7.97 6.19C6.51 42.62 14.62 48 24 48z"
+      />
+    </Svg>
+  );
+}
+// reference screenshot: no border, opaque white, icon + label, even shadow)
+// ---------------------------------------------------------------------------
+
+const SOCIAL_HEIGHT = 50;
+const SOCIAL_RADIUS = SOCIAL_HEIGHT / 2; // same capsule-pill language as GradientCTA
+
+function SocialButton({
+  renderIcon,
+  label,
+  onPress,
+}: {
+  renderIcon: () => ReactNode;
+  label: string;
+  onPress?: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.85}
+      className="flex-1 flex-row items-center justify-center gap-2"
+      style={{
+        height: SOCIAL_HEIGHT,
+        borderRadius: SOCIAL_RADIUS,
+        backgroundColor: '#FFFFFF',
+        shadowColor: '#2A5A82',
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 3 },
+        elevation: 2,
+      }}
+    >
+      {renderIcon()}
+      <Text className="text-sm font-semibold" style={{ color: TEXT_DARK }}>
+        {label}
+      </Text>
     </TouchableOpacity>
   );
 }
@@ -409,8 +498,19 @@ export default function Login() {
                     }}
                   >
                     <View className="flex-row">
+                      <View
+                        className="flex-1"
+                        style={{
+                          shadowColor: loginMethod === 'email' ? BRAND_GREEN : 'transparent',
+                          shadowOpacity: loginMethod === 'email' ? 0.4 : 0,
+                          shadowRadius: 8,
+                          shadowOffset: { width: 0, height: 4 },
+                          elevation: loginMethod === 'email' ? 4 : 0,
+                          borderRadius: 12,
+                        }}
+                      >
                       <TouchableOpacity
-                        className="flex-1 h-10 items-center justify-center"
+                        className="h-10 items-center justify-center"
                         style={{ borderRadius: 12, overflow: 'hidden' }}
                         onPress={() => switchMethod('email')}
                       >
@@ -439,9 +539,21 @@ export default function Login() {
                           Email
                         </Text>
                       </TouchableOpacity>
+                      </View>
 
+                      <View
+                        className="flex-1"
+                        style={{
+                          shadowColor: loginMethod === 'phone' ? BRAND_GREEN : 'transparent',
+                          shadowOpacity: loginMethod === 'phone' ? 0.4 : 0,
+                          shadowRadius: 8,
+                          shadowOffset: { width: 0, height: 4 },
+                          elevation: loginMethod === 'phone' ? 4 : 0,
+                          borderRadius: 12,
+                        }}
+                      >
                       <TouchableOpacity
-                        className="flex-1 h-10 items-center justify-center"
+                        className="h-10 items-center justify-center"
                         style={{ borderRadius: 12, overflow: 'hidden' }}
                         onPress={() => switchMethod('phone')}
                       >
@@ -470,6 +582,7 @@ export default function Login() {
                           Phone
                         </Text>
                       </TouchableOpacity>
+                      </View>
                     </View>
                   </View>
 
@@ -612,37 +725,13 @@ export default function Login() {
                     <View className="flex-1 h-px" style={{ backgroundColor: INPUT_BORDER }} />
                   </View>
 
-                  {/* Social buttons — simple bordered pills */}
+                  {/* Social buttons — solid white pills with soft shadow, matching reference */}
                   <View className="flex-row gap-3 mb-6">
-                    <TouchableOpacity
-                      className="flex-1 flex-row items-center justify-center h-12 gap-2"
-                      style={{
-                        borderRadius: 12,
-                        borderWidth: 1,
-                        borderColor: INPUT_BORDER,
-                        backgroundColor: 'rgba(255,255,255,0.45)',
-                      }}
-                    >
-                      <Ionicons name="logo-google" size={18} color="#DB4437" />
-                      <Text className="text-sm font-semibold" style={{ color: TEXT_DARK }}>
-                        Google
-                      </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      className="flex-1 flex-row items-center justify-center h-12 gap-2"
-                      style={{
-                        borderRadius: 12,
-                        borderWidth: 1,
-                        borderColor: INPUT_BORDER,
-                        backgroundColor: 'rgba(255,255,255,0.45)',
-                      }}
-                    >
-                      <Ionicons name="logo-apple" size={20} color={TEXT_DARK} />
-                      <Text className="text-sm font-semibold" style={{ color: TEXT_DARK }}>
-                        Apple
-                      </Text>
-                    </TouchableOpacity>
+                    <SocialButton renderIcon={() => <GoogleGlyph size={18} />} label="Google" />
+                    <SocialButton
+                      renderIcon={() => <Ionicons name="logo-apple" size={20} color="#000000" />}
+                      label="Apple"
+                    />
                   </View>
 
                   {/* Signup */}
