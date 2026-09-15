@@ -4,9 +4,10 @@ import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // ---------------------------------------------------------------------------
-// Shared palette — copied 1:1 from login.tsx so every Groups screen stays on
+// Shared palette — same recipe as login.tsx so every Groups screen stays on
 // the same visual language (glass cards, mint-green gradient CTAs).
 // ---------------------------------------------------------------------------
 
@@ -30,25 +31,21 @@ export const colors = {
 export const CARD_PADDING_H = 20;
 
 // ---------------------------------------------------------------------------
-// Page background — soft mint/blue wash standing in for the bubble artwork
-// used on the login/onboarding screens. Swap the LinearGradient for an
-// ImageBackground + require('.../background_onboarding.png') once the asset
-// path for this route depth is wired up.
+// Page background — soft mint/blue wash standing in for the bubble artwork.
+// Fills the whole screen; each page handles its own top/bottom safe padding
+// so it looks right on notch phones, tall Android phones, and small phones.
 // ---------------------------------------------------------------------------
 
 export function BubbleBackdrop({ children }: { children: ReactNode }) {
   return (
-    <LinearGradient
-      colors={['#EAF9F3', '#F4FAFC', '#FFFFFF']}
-      style={{ flex: 1 }}
-    >
+    <LinearGradient colors={['#EAF9F3', '#F4FAFC', '#FFFFFF']} style={{ flex: 1 }}>
       {children}
     </LinearGradient>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Glass card — bg-white/20 + blur + inner bg-white/25, matches login.tsx
+// Glass card
 // ---------------------------------------------------------------------------
 
 export function GlassCard({
@@ -61,10 +58,7 @@ export function GlassCard({
   style?: any;
 }) {
   return (
-    <View
-      className={`overflow-hidden border border-white/40 bg-white/30 ${className}`}
-      style={style}
-    >
+    <View className={`overflow-hidden border border-white/40 bg-white/30 ${className}`} style={style}>
       <BlurView intensity={20} tint="light" className="absolute inset-0" />
       <View className="bg-white/25">{children}</View>
     </View>
@@ -73,17 +67,14 @@ export function GlassCard({
 
 export function GlassInput({ children, style }: { children: ReactNode; style?: any }) {
   return (
-    <View
-      className="overflow-hidden rounded-2xl border border-white/40 bg-white/40"
-      style={style}
-    >
+    <View className="overflow-hidden rounded-2xl border border-white/40 bg-white/40" style={style}>
       {children}
     </View>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Gradient CTA — same capsule pill as login.tsx
+// Gradient CTA — capsule pill button, 3 variants
 // ---------------------------------------------------------------------------
 
 const CTA_HEIGHT = 52;
@@ -113,12 +104,7 @@ export function GradientCTA({
         disabled={disabled}
         activeOpacity={0.85}
         className="flex-row items-center justify-center border"
-        style={{
-          height: CTA_HEIGHT,
-          borderRadius: radius,
-          borderColor: bc,
-          gap: 8,
-        }}
+        style={{ height: CTA_HEIGHT, borderRadius: radius, borderColor: bc, gap: 8 }}
       >
         {icon ? <Ionicons name={icon} size={17} color={bc === colors.brand ? colors.brandDark : bc} /> : null}
         {children}
@@ -133,12 +119,7 @@ export function GradientCTA({
         disabled={disabled}
         activeOpacity={0.85}
         className="flex-row items-center justify-center"
-        style={{
-          height: CTA_HEIGHT,
-          borderRadius: radius,
-          backgroundColor: colors.danger,
-          gap: 8,
-        }}
+        style={{ height: CTA_HEIGHT, borderRadius: radius, backgroundColor: colors.danger, gap: 8 }}
       >
         {icon ? <Ionicons name={icon} size={17} color="#fff" /> : null}
         {children}
@@ -182,8 +163,9 @@ export function GradientCTA({
 }
 
 // ---------------------------------------------------------------------------
-// Screen header — back button, title, optional right action. Used on every
-// sub-page (Members, Expenses, Settings, Invite, Edit...)
+// Screen header — back button, title, optional right action.
+// Uses safe-area insets so the row always clears the notch / status bar,
+// instead of a fixed pt-4 that sits too high on some phones.
 // ---------------------------------------------------------------------------
 
 export function ScreenHeader({
@@ -200,8 +182,13 @@ export function ScreenHeader({
   onRightPress?: () => void;
 }) {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+
   return (
-    <View className="flex-row items-center justify-between px-5 pt-4 pb-2">
+    <View
+      className="flex-row items-center justify-between px-5 pb-2"
+      style={{ paddingTop: insets.top + 10 }}
+    >
       <TouchableOpacity
         onPress={onBack ?? (() => router.back())}
         className="w-10 h-10 rounded-full items-center justify-center bg-white/60 border border-white/50"
@@ -235,7 +222,7 @@ export function ScreenHeader({
 }
 
 // ---------------------------------------------------------------------------
-// Avatar — gradient initials circle, no image asset required
+// Avatar — gradient initials circle
 // ---------------------------------------------------------------------------
 
 const AVATAR_PALETTE = [
@@ -247,22 +234,9 @@ const AVATAR_PALETTE = [
   ['#84FAB0', '#8FD3F4'],
 ];
 
-export function Avatar({
-  name,
-  size = 36,
-  uri,
-}: {
-  name: string;
-  size?: number;
-  uri?: string;
-}) {
+export function Avatar({ name, size = 36 }: { name: string; size?: number }) {
   const idx = name.charCodeAt(0) % AVATAR_PALETTE.length;
-  const initials = name
-    .split(' ')
-    .map((p) => p[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
+  const initials = name.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
 
   return (
     <LinearGradient
@@ -306,8 +280,7 @@ export function StatusPill({ status }: { status: GroupStatus }) {
 }
 
 // ---------------------------------------------------------------------------
-// Settings-style row — icon, label, chevron. Used in Group Settings, and
-// Group Details quick links.
+// Settings-style row — icon, label, chevron
 // ---------------------------------------------------------------------------
 
 export function ActionRow({
@@ -347,26 +320,32 @@ export function ActionRow({
 }
 
 // ---------------------------------------------------------------------------
-// Labeled text field wrapper (label + GlassInput + icon)
+// Labeled text field — label above a glass pill input with a leading icon.
+// Matches the "Group Name / Destination / Budget..." fields in the
+// Create Group & Edit Group screens.
 // ---------------------------------------------------------------------------
+
+type LabeledFieldProps = {
+  label: string;
+  value: string;
+  onChangeText: (text: string) => void;
+  placeholder?: string;
+  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
+  multiline?: boolean;
+  keyboardType?: any;
+  icon?: keyof typeof Ionicons.glyphMap;
+};
 
 export function LabeledField({
   label,
-  icon,
   value,
   onChangeText,
   placeholder,
+  autoCapitalize = 'sentences',
   multiline,
   keyboardType,
-}: {
-  label: string;
-  icon?: keyof typeof Ionicons.glyphMap;
-  value: string;
-  onChangeText: (t: string) => void;
-  placeholder?: string;
-  multiline?: boolean;
-  keyboardType?: any;
-}) {
+  icon,
+}: LabeledFieldProps) {
   return (
     <View style={{ marginBottom: 16 }}>
       <Text className="text-[13px] mb-2 font-semibold" style={{ color: colors.textMuted }}>
@@ -374,8 +353,11 @@ export function LabeledField({
       </Text>
       <GlassInput>
         <View
-          className="flex-row items-center px-3.5"
-          style={{ minHeight: multiline ? 90 : 52, alignItems: multiline ? 'flex-start' : 'center' }}
+          className="flex-row px-3.5"
+          style={{
+            minHeight: multiline ? 90 : 52,
+            alignItems: multiline ? 'flex-start' : 'center',
+          }}
         >
           {icon ? (
             <Ionicons
@@ -392,8 +374,10 @@ export function LabeledField({
             placeholderTextColor="rgba(20,33,43,0.4)"
             value={value}
             onChangeText={onChangeText}
+            autoCapitalize={autoCapitalize}
             multiline={multiline}
             keyboardType={keyboardType}
+            textAlignVertical={multiline ? 'top' : 'center'}
           />
         </View>
       </GlassInput>
@@ -402,9 +386,11 @@ export function LabeledField({
 }
 
 // ---------------------------------------------------------------------------
-// Simple money formatter (₹)
+// Money formatter (₹)
 // ---------------------------------------------------------------------------
 
 export function inr(n: number) {
   return `₹${n.toLocaleString('en-IN')}`;
 }
+
+export { useSafeAreaInsets };

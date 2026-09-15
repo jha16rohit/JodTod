@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, ScrollView } from 'react-nativ
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   BubbleBackdrop,
@@ -25,6 +26,7 @@ const FORCE_EMPTY_STATE = false;
 
 export default function GroupsList() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [query, setQuery] = useState('');
   const [tab, setTab] = useState<FilterTab>('All');
 
@@ -40,7 +42,10 @@ export default function GroupsList() {
 
   return (
     <BubbleBackdrop>
-      <View className="flex-1 px-5 pt-4">
+      {/* paddingTop uses the device safe-area inset + a little extra, so the
+          "+" button always sits clear of the notch/status bar instead of
+          being pinned to the very top edge on tall Android phones. */}
+      <View className="flex-1 px-5" style={{ paddingTop: insets.top + 14 }}>
         {/* Header */}
         <View className="flex-row items-center justify-between mb-4">
           <Text className="text-2xl font-extrabold" style={{ color: colors.headerTitle }}>
@@ -102,10 +107,7 @@ export default function GroupsList() {
                       borderColor: active ? colors.brand : colors.inputBorder,
                     }}
                   >
-                    <Text
-                      className="text-[13px] font-semibold"
-                      style={{ color: active ? '#fff' : colors.textMuted }}
-                    >
+                    <Text className="text-[13px] font-semibold" style={{ color: active ? '#fff' : colors.textMuted }}>
                       {t}
                     </Text>
                   </TouchableOpacity>
@@ -118,7 +120,10 @@ export default function GroupsList() {
         {groups.length === 0 ? (
           <EmptyState onCreate={() => router.push('/(tabs)/groups/create' as any)} />
         ) : (
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100, gap: 14 }}>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: insets.bottom + 100, gap: 14 }}
+          >
             {filtered.map((g) => (
               <GroupCard key={g.id} group={g} onPress={() => router.push(`/(tabs)/groups/${g.id}` as any)} />
             ))}

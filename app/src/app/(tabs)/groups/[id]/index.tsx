@@ -1,1 +1,1 @@
-export { default } from '@/components/groups/g_index';
+export { default } from './groups_detail';

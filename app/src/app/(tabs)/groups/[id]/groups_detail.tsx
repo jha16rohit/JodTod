@@ -2,6 +2,7 @@ import { View, Text, TouchableOpacity, ScrollView, Dimensions } from 'react-nati
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   GlassCard,
@@ -18,6 +19,7 @@ const { width: SCREEN_W } = Dimensions.get('window');
 
 export default function GroupDetails() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const group = getGroup(id as string);
 
@@ -34,7 +36,7 @@ export default function GroupDetails() {
 
   return (
     <View className="flex-1" style={{ backgroundColor: colors.bg }}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}>
         {/* Cover header */}
         <View style={{ width: SCREEN_W, height: 220 }}>
           <LinearGradient
@@ -43,7 +45,7 @@ export default function GroupDetails() {
             end={{ x: 1, y: 1 }}
             style={{ flex: 1 }}
           >
-            <View className="flex-row items-center justify-between px-5 pt-4">
+            <View className="flex-row items-center justify-between px-5" style={{ paddingTop: insets.top + 10 }}>
               <TouchableOpacity
                 onPress={() => router.back()}
                 className="w-10 h-10 rounded-full items-center justify-center"
@@ -113,10 +115,7 @@ export default function GroupDetails() {
               </TouchableOpacity>
 
               {/* Total expenses */}
-              <View
-                className="rounded-2xl px-4 py-3.5 mb-3"
-                style={{ backgroundColor: colors.neutralBg }}
-              >
+              <View className="rounded-2xl px-4 py-3.5 mb-3" style={{ backgroundColor: colors.neutralBg }}>
                 <Text className="text-[12px] mb-1" style={{ color: colors.textMuted }}>
                   Total Expenses
                 </Text>
