@@ -14,6 +14,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
+import { Alert } from 'react-native';
+import { useAuth } from '../../context/AuthContext';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -260,7 +262,7 @@ function SocialButton({
 function BubbleBackdrop({ children }: { children: ReactNode }) {
   return (
     <ImageBackground
-      source={require('../../assets/images/jodtod/background_onboarding.png')}
+      source={require('../../../assets/images/jodtod/background_onboarding.png')}
       resizeMode="cover"
       style={{ flex: 1, width: SCREEN_W }}
     >
@@ -279,7 +281,7 @@ function HeaderVisual({ height }: { height: number }) {
   return (
     <View style={{ width: SCREEN_W, height, overflow: 'hidden' }}>
       <Image
-        source={require('../../assets/images/jodtod/tip.png')}
+        source={require('../../../assets/images/jodtod/tip.png')}
         style={{
           position: 'absolute',
           top: -10,
@@ -313,6 +315,7 @@ function HeaderVisual({ height }: { height: number }) {
 
 export default function Signup() {
   const router = useRouter();
+  const { signup, isLoading: authLoading } = useAuth();
 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -321,6 +324,49 @@ export default function Signup() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const handleSignup = async () => {
+    setFormError(null);
+    if (!fullName.trim()) {
+      setFormError('Enter your full name.');
+      return;
+    }
+    if (!email.trim()) {
+      setFormError('Enter your email address.');
+      return;
+    }
+    if (!password || password.length < 8) {
+      setFormError('Password must be at least 8 characters.');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setFormError('Passwords do not match.');
+      return;
+    }
+    if (!agreedToTerms) {
+      setFormError('Please agree to the Terms of Service and Privacy Policy.');
+      return;
+    }
+    setBusy(true);
+    try {
+      await signup({ name: fullName.trim(), email: email.trim(), password });
+      // AuthContext is now authenticated → (auth) layout redirects to /(tabs).
+      router.replace('/(tabs)' as any);
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : 'Signup failed. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSocial = (provider: 'Google' | 'Apple') => {
+    Alert.alert(
+      `${provider} sign-up`,
+      `${provider} sign-up is not available yet: the backend has no OAuth endpoint implemented, so no account was created.`
+    );
+  };
 
   return (
     <View className="flex-1">
@@ -516,9 +562,17 @@ export default function Signup() {
                   </Text>
                 </TouchableOpacity>
 
+                {formError ? (
+                  <Text className="text-[13px] mb-4 text-center font-semibold" style={{ color: '#D64545' }}>
+                    {formError}
+                  </Text>
+                ) : null}
+
                 <View style={{ marginBottom: 24 }}>
-                  <GradientCTA onPress={() => router.push('/(tabs)' as any)}>
-                    <Text className="text-white text-base font-bold">Sign Up</Text>
+                  <GradientCTA onPress={handleSignup} disabled={busy || authLoading}>
+                    <Text className="text-white text-base font-bold">
+                      {busy || authLoading ? 'Creating…' : 'Sign Up'}
+                    </Text>
                   </GradientCTA>
                 </View>
 
@@ -531,12 +585,17 @@ export default function Signup() {
                   <View className="flex-1 h-px" style={{ backgroundColor: INPUT_BORDER }} />
                 </View>
 
-                {/* Social buttons — solid white capsule pills, real multicolor Google mark */}
+                {/* Social buttons — foundation only; backend OAuth is unimplemented */}
                 <View className="flex-row gap-3 mb-6">
-                  <SocialButton renderIcon={() => <GoogleGlyph size={18} />} label="Google" />
+                  <SocialButton
+                    renderIcon={() => <GoogleGlyph size={18} />}
+                    label="Google"
+                    onPress={() => handleSocial('Google')}
+                  />
                   <SocialButton
                     renderIcon={() => <Ionicons name="logo-apple" size={20} color="#000000" />}
                     label="Apple"
+                    onPress={() => handleSocial('Apple')}
                   />
                 </View>
 
@@ -545,7 +604,7 @@ export default function Signup() {
                   <Text className="text-[13px]" style={{ color: TEXT_MUTED }}>
                     Already have an account?{' '}
                   </Text>
-                  <TouchableOpacity onPress={() => router.push('/login')}>
+                  <TouchableOpacity onPress={() => router.push('/login' as any)}>
                     <Text className="text-[13px] font-bold" style={{ color: GLOW_TO }}>
                       Login
                     </Text>

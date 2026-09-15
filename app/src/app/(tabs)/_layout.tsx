@@ -1,8 +1,10 @@
-import { Tabs, useRouter } from "expo-router";
+import { Redirect, Tabs, useRouter } from "expo-router";
 import { View, Text, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
+import { useAuth } from "../../context/AuthContext";
+import AuthLoadingScreen from "../../components/auth/AuthLoadingScreen";
 
 function CustomTabBar({ state, navigation }: any) {
   const router = useRouter();
@@ -139,6 +141,16 @@ const tabs = [
 }
 
 export default function TabsLayout() {
+  const { isLoading, isAuthenticated } = useAuth();
+
+  if (isLoading) {
+    return <AuthLoadingScreen message="Loading your account…" />;
+  }
+
+  if (!isAuthenticated) {
+    return <Redirect href="/login" />;
+  }
+
   return (
     <Tabs
       tabBar={(props) => <CustomTabBar {...props} />}

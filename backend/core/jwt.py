@@ -52,7 +52,6 @@ def _utc_now() -> datetime:
 # ============================================================
 # CREATE ACCESS TOKEN
 # ============================================================
-
 def create_access_token(
     user_id: UUID | str,
     session_id: UUID | str,

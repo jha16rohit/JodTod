@@ -18,6 +18,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
+import { Alert } from 'react-native';
+import { useAuth } from '../../context/AuthContext';
 
 const OTP_LENGTH = 6;
 const RESEND_SECONDS = 30;
@@ -266,7 +268,7 @@ function SocialButton({
 function BubbleBackdrop({ children }: { children: ReactNode }) {
   return (
     <ImageBackground
-      source={require('../../assets/images/jodtod/background_onboarding.png')}
+      source={require('../../../assets/images/jodtod/background_onboarding.png')}
       resizeMode="cover"
       style={{ flex: 1, width: SCREEN_W }}
     >
@@ -284,7 +286,7 @@ function HeaderVisual({ height }: { height: number }) {
   return (
     <View style={{ width: SCREEN_W, height, overflow: 'hidden' }}>
       <Image
-        source={require('../../assets/images/jodtod/plan-trips-login.png')}
+        source={require('../../../assets/images/jodtod/plan-trips-login.png')}
         style={{
           position: 'absolute',
           top: 0,
@@ -304,6 +306,7 @@ function HeaderVisual({ height }: { height: number }) {
 
 export default function Login() {
   const router = useRouter();
+  const { login, sendOTP, verifyOTP, isLoading: authLoading } = useAuth();
 
   const [step, setStep] = useState<Step>('form');
 
@@ -313,6 +316,9 @@ export default function Login() {
   const [rememberMe, setRememberMe] = useState(true);
   const [loginMethod, setLoginMethod] = useState<'email' | 'phone'>('email');
   const [phone, setPhone] = useState('');
+  const [formError, setFormError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [otpMessage, setOtpMessage] = useState<string | null>(null);
 
   const [digits, setDigits] = useState<string[]>(Array(OTP_LENGTH).fill(''));
   const [secondsLeft, setSecondsLeft] = useState(RESEND_SECONDS);
@@ -324,6 +330,7 @@ export default function Login() {
 
   const spin = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0)).current;
+  const verifyLoop = useRef<Animated.CompositeAnimation | null>(null);
 
   useEffect(() => {
     if (step !== 'otp') return;
@@ -336,48 +343,39 @@ export default function Login() {
     return () => clearInterval(interval);
   }, [step, secondsLeft]);
 
+  // Spinner runs only while the real verify-OTP network request is in flight.
   useEffect(() => {
-    if (step !== 'verifying') return;
-
-    const loop = Animated.loop(
-      Animated.timing(spin, {
-        toValue: 1,
-        duration: 900,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    );
-
-    loop.start();
-
-    const verifyTimer = setTimeout(() => {
-      loop.stop();
+    if (step === 'verifying') {
+      const loop = Animated.loop(
+        Animated.timing(spin, {
+          toValue: 1,
+          duration: 900,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        })
+      );
+      verifyLoop.current = loop;
+      loop.start();
+      return () => {
+        loop.stop();
+      };
+    }
+    if (step === 'verified') {
+      verifyLoop.current?.stop();
       scale.setValue(0);
-      setStep('verified');
-
       Animated.spring(scale, {
         toValue: 1,
         friction: 4,
         tension: 80,
         useNativeDriver: true,
       }).start();
-    }, 1800);
-
-    return () => {
-      clearTimeout(verifyTimer);
-      loop.stop();
-    };
+    }
   }, [step, scale, spin]);
 
-  useEffect(() => {
-    if (step !== 'verified') return;
-
-    const redirectTimer = setTimeout(() => {
-      router.replace('/(tabs)' as any);
-    }, 1400);
-
-    return () => clearTimeout(redirectTimer);
-  }, [step, router]);
+  // NOTE: no auto-redirect from "verified" to /(tabs) here. OTP
+  // verification alone does not create a backend session (the backend has
+  // no phone-login session endpoint yet), so navigating would fake auth.
+  // The (auth) layout redirects only when AuthContext is authenticated.
 
   const rotateInterpolate = spin.interpolate({
     inputRange: [0, 1],
@@ -386,12 +384,54 @@ export default function Login() {
 
   const switchMethod = (method: 'email' | 'phone') => {
     setLoginMethod(method);
+    setFormError(null);
+    setOtpMessage(null);
   };
 
-  const handleSendOtp = () => {
-    setDigits(Array(OTP_LENGTH).fill(''));
-    setSecondsLeft(RESEND_SECONDS);
-    setStep('otp');
+  const handleEmailLogin = async () => {
+    setFormError(null);
+    if (!email.trim()) {
+      setFormError('Enter your email address.');
+      return;
+    }
+    if (!password) {
+      setFormError('Enter your password.');
+      return;
+    }
+    setBusy(true);
+    try {
+      await login({ identifier: email.trim(), password });
+      // AuthContext is now authenticated → (auth) layout redirects to /(tabs).
+      router.replace('/(tabs)' as any);
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : 'Login failed. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSendOtp = async () => {
+    setFormError(null);
+    setOtpMessage(null);
+    const destination = phone.trim();
+    if (!destination) {
+      setFormError('Enter your phone number to receive a code.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = (await sendOTP({ destination, purpose: 'phone_login' })) as {
+        message?: string;
+      };
+      setDigits(Array(OTP_LENGTH).fill(''));
+      setSecondsLeft(RESEND_SECONDS);
+      setOtpMessage(result?.message ?? 'Code sent. Check your phone.');
+      setStep('otp');
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : 'Could not send the code.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const handleChangeDigit = (text: string, index: number) => {
@@ -416,15 +456,46 @@ export default function Login() {
     }
   };
 
-  const handleResend = () => {
-    setDigits(Array(OTP_LENGTH).fill(''));
-    setSecondsLeft(RESEND_SECONDS);
-    inputRefs.current[0]?.focus();
+  const handleResend = async () => {
+    const destination = phone.trim();
+    if (!destination) return;
+    try {
+      await sendOTP({ destination, purpose: 'phone_login' });
+      setDigits(Array(OTP_LENGTH).fill(''));
+      setSecondsLeft(RESEND_SECONDS);
+      setOtpMessage('A new code was sent.');
+      inputRefs.current[0]?.focus();
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : 'Could not resend the code.');
+    }
   };
 
-  const handleVerify = () => {
-    if (!isOtpComplete) return;
+  const handleVerify = async () => {
+    if (!isOtpComplete || busy) return;
+    setBusy(true);
+    setFormError(null);
     setStep('verifying');
+    try {
+      const result = (await verifyOTP({
+        destination: phone.trim(),
+        otp,
+        purpose: 'phone_login',
+      })) as { message?: string };
+      setOtpMessage(result?.message ?? 'Number verified.');
+      setStep('verified');
+    } catch (e) {
+      setStep('otp');
+      setFormError(e instanceof Error ? e.message : 'Invalid code. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSocial = (provider: 'Google' | 'Apple') => {
+    Alert.alert(
+      `${provider} sign-in`,
+      `${provider} sign-in is not available yet: the backend has no OAuth endpoint implemented, so no account was created or signed in.`
+    );
   };
 
   return (
@@ -669,16 +740,24 @@ export default function Login() {
                           </Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity>
+                        <TouchableOpacity onPress={() => router.push('/forgot-password' as any)}>
                           <Text className="text-[13px] font-semibold" style={{ color: BRAND_GREEN_DARK }}>
                             Forgot password?
                           </Text>
                         </TouchableOpacity>
                       </View>
 
+                      {formError && loginMethod === 'email' ? (
+                        <Text className="text-[13px] mb-4 text-center font-semibold" style={{ color: '#D64545' }}>
+                          {formError}
+                        </Text>
+                      ) : null}
+
                       <View style={{ marginBottom: 24 }}>
-                        <GradientCTA onPress={() => router.push('/(tabs)' as any)}>
-                          <Text className="text-white text-base font-bold">Login</Text>
+                        <GradientCTA onPress={handleEmailLogin} disabled={busy || authLoading}>
+                          <Text className="text-white text-base font-bold">
+                            {busy || authLoading ? 'Logging in…' : 'Login'}
+                          </Text>
                         </GradientCTA>
                       </View>
                     </>
@@ -708,9 +787,17 @@ export default function Login() {
                         </View>
                       </GlassInput>
 
+                      {formError && loginMethod === 'phone' ? (
+                        <Text className="text-[13px] mb-4 text-center font-semibold" style={{ color: '#D64545' }}>
+                          {formError}
+                        </Text>
+                      ) : null}
+
                       <View style={{ marginBottom: 24 }}>
-                        <GradientCTA onPress={handleSendOtp}>
-                          <Text className="text-white text-base font-bold">Send OTP</Text>
+                        <GradientCTA onPress={handleSendOtp} disabled={busy}>
+                          <Text className="text-white text-base font-bold">
+                            {busy ? 'Sending…' : 'Send OTP'}
+                          </Text>
                         </GradientCTA>
                       </View>
                     </>
@@ -725,12 +812,17 @@ export default function Login() {
                     <View className="flex-1 h-px" style={{ backgroundColor: INPUT_BORDER }} />
                   </View>
 
-                  {/* Social buttons — solid white pills with soft shadow, matching reference */}
+                  {/* Social buttons — foundation only; backend OAuth is unimplemented */}
                   <View className="flex-row gap-3 mb-6">
-                    <SocialButton renderIcon={() => <GoogleGlyph size={18} />} label="Google" />
+                    <SocialButton
+                      renderIcon={() => <GoogleGlyph size={18} />}
+                      label="Google"
+                      onPress={() => handleSocial('Google')}
+                    />
                     <SocialButton
                       renderIcon={() => <Ionicons name="logo-apple" size={20} color="#000000" />}
                       label="Apple"
+                      onPress={() => handleSocial('Apple')}
                     />
                   </View>
 
@@ -739,7 +831,7 @@ export default function Login() {
                     <Text className="text-[13px]" style={{ color: TEXT_MUTED }}>
                       Don't have an account?{' '}
                     </Text>
-                    <TouchableOpacity onPress={() => router.push('/signup')}>
+                    <TouchableOpacity onPress={() => router.push('/signup' as any)}>
                       <Text className="text-[13px] font-bold" style={{ color: BRAND_GREEN_DARK }}>
                         Sign up
                       </Text>
@@ -808,6 +900,17 @@ export default function Login() {
                         ))}
                       </View>
 
+                      {otpMessage ? (
+                        <Text className="text-[13px] mb-4 text-center font-semibold" style={{ color: BRAND_GREEN_DARK }}>
+                          {otpMessage}
+                        </Text>
+                      ) : null}
+                      {formError ? (
+                        <Text className="text-[13px] mb-4 text-center font-semibold" style={{ color: '#D64545' }}>
+                          {formError}
+                        </Text>
+                      ) : null}
+
                       {secondsLeft > 0 ? (
                         <Text className="text-[13px] mb-8" style={{ color: TEXT_MUTED }}>
                           Resend OTP in 00:{secondsLeft < 10 ? '0' : ''}
@@ -822,12 +925,12 @@ export default function Login() {
                       )}
 
                       <View style={{ width: '100%' }}>
-                        <GradientCTA onPress={handleVerify} disabled={!isOtpComplete}>
+                        <GradientCTA onPress={handleVerify} disabled={!isOtpComplete || busy}>
                           <Text
                             className="text-base font-bold"
                             style={{ color: isOtpComplete ? '#FFFFFF' : TEXT_MUTED }}
                           >
-                            Verify
+                            {busy ? 'Verifying…' : 'Verify'}
                           </Text>
                         </GradientCTA>
                       </View>
@@ -890,8 +993,21 @@ export default function Login() {
                             Verified!
                           </Text>
                           <Text className="text-[13px] text-center" style={{ color: TEXT_MUTED }}>
-                            Taking you to your trips...
+                            {otpMessage ?? 'Your number is verified.'}
+                            {'\n'}Return to login to continue — OTP alone does not sign you in yet.
                           </Text>
+                          <TouchableOpacity
+                            onPress={() => {
+                              setDigits(Array(OTP_LENGTH).fill(''));
+                              setStep('form');
+                              setLoginMethod('email');
+                            }}
+                            className="mt-6"
+                          >
+                            <Text className="text-[13px] font-bold" style={{ color: BRAND_GREEN_DARK }}>
+                              Back to login
+                            </Text>
+                          </TouchableOpacity>
                         </>
                       )}
                     </View>

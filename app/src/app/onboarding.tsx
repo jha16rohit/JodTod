@@ -68,14 +68,14 @@ export default function Onboarding() {
 
   const handleNext = () => {
     if (isLastSlide) {
-      router.push('/login');
+      router.push('/login' as any);
     } else {
       goToSlide(activeIndex + 1);
     }
   };
 
   const handleSkip = () => {
-    router.push('/login');
+    router.push('/login' as any);
   };
 
   return (

@@ -4,11 +4,14 @@ import {
   Image,
   ScrollView,
   TouchableOpacity,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
+import { useRouter } from 'expo-router';
+import { useAuth } from '../../context/AuthContext';
 
 const getGreeting = () => {
   const hour = new Date().getHours();
@@ -27,8 +30,6 @@ const getGreeting = () => {
 
   return 'Good Night';
 };
-
-const userName = 'Rohit';
 
 const groups = [
   {
@@ -93,6 +94,27 @@ const expenses = [
 ];
 
 export default function Home() {
+  const router = useRouter();
+  const { user, logout } = useAuth();
+
+  const displayName = user?.name?.split(' ')[0] || 'there';
+
+  const handleProfilePress = () => {
+    Alert.alert('Account', user?.email ?? user?.phone ?? 'Signed in', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Log out',
+        style: 'destructive',
+        onPress: () => {
+          void (async () => {
+            await logout();
+            router.replace('/login' as any);
+          })();
+        },
+      },
+    ]);
+  };
+
   return (
     <SafeAreaView
       edges={['top']}
@@ -116,7 +138,7 @@ export default function Home() {
         </Text>
 
         <Text className="ml-1.5 text-[23px] font-extrabold text-[#FF5A36]">
-          {userName}
+          {displayName}
         </Text>
       </View>
 
@@ -154,6 +176,7 @@ export default function Home() {
 
     <TouchableOpacity
       activeOpacity={0.8}
+      onPress={handleProfilePress}
       className="h-11 w-11 items-center justify-center overflow-hidden rounded-full border-2 border-[#6ED5B3] bg-[#E7F4F0]"
     >
       <Ionicons

@@ -1,10 +1,10 @@
 import "../../global.css";
-import { useEffect, useState } from 'react';
-import { Stack } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
-import { useFonts } from 'expo-font';
+import { useEffect, useState } from "react";
+import { Stack } from "expo-router";
+import * as SplashScreen from "expo-splash-screen";
+import { AuthProvider } from "../context/AuthContext";
 
-SplashScreen.preventAutoHideAsync();
+void SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const [appIsReady, setAppIsReady] = useState(false);
@@ -12,19 +12,21 @@ export default function RootLayout() {
   useEffect(() => {
     async function prepare() {
       try {
-        // Preload any fonts/assets your AnimatedIntro needs here
+        // Preload fonts/assets here if needed. Auth bootstrap runs
+        // inside AuthProvider and gates route decisions via isLoading,
+        // so the splash screen must not hide before this resolves.
       } catch (e) {
         console.warn(e);
       } finally {
         setAppIsReady(true);
       }
     }
-    prepare();
+    void prepare();
   }, []);
 
   useEffect(() => {
     if (appIsReady) {
-      SplashScreen.hideAsync();
+      void SplashScreen.hideAsync();
     }
   }, [appIsReady]);
 
@@ -33,9 +35,13 @@ export default function RootLayout() {
   }
 
   return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="index" />
-      <Stack.Screen name="onboarding" />
-    </Stack>
+    <AuthProvider>
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="index" />
+        <Stack.Screen name="onboarding" />
+        <Stack.Screen name="(auth)" />
+        <Stack.Screen name="(tabs)" />
+      </Stack>
+    </AuthProvider>
   );
 }

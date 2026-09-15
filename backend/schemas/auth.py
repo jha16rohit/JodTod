@@ -58,6 +58,26 @@ class SignupRequest(BaseModel):
         max_length=128,
     )
 
+    device_id: str = Field(
+        min_length=1,
+        max_length=255,
+    )
+
+    device_name: Optional[str] = Field(
+        default=None,
+        max_length=255,
+    )
+
+    platform: Optional[str] = Field(
+        default=None,
+        max_length=32,
+    )
+
+    app_version: Optional[str] = Field(
+        default=None,
+        max_length=64,
+    )
+    
     @model_validator(mode="after")
     def require_at_least_one_identifier(self) -> "SignupRequest":
         if not self.email and not self.phone:

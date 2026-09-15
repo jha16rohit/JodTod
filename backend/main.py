@@ -5,7 +5,6 @@ Application entry point for the FastAPI backend.
 """
 
 from contextlib import asynccontextmanager
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -14,6 +13,9 @@ from backend.database import (
     initialize_database,
     dispose_database,
 )
+
+# FastAPI application instance
+from backend.routes.auth_signup import router as auth_signup_router
 
 
 @asynccontextmanager
@@ -46,6 +48,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ---------------------------------------------------------------------------
+# Authentication Routes
+# ---------------------------------------------------------------------------
+app.include_router(
+    auth_signup_router,
+    prefix="/api/auth",
+    tags=["Authentication"],
+)
+
 
 @app.get("/")
 async def home():
