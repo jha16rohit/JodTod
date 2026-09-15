@@ -17,7 +17,8 @@
     "plugins": [
       "expo-image",
       "expo-router",
-      "expo-asset"
+      "expo-asset",
+      "expo-secure-store"
     ]
   }
 }

@@ -2,6 +2,7 @@
 
 # dependencies
 node_modules/
+__pycache__/
 
 # Expo
 .expo/
@@ -30,8 +31,10 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
-.env*.local
+# local env files - never commit real secrets
+.env
+.env.*
+!.env.example
 
 # typescript
 *.tsbuildinfo

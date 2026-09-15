@@ -1,4 +1,3 @@
-// app/src/services/api.ts
 import { API_URL } from '../config/api';
 
 export const fetchHealthCheck = async () => {
@@ -7,8 +6,7 @@ export const fetchHealthCheck = async () => {
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    const data = await response.json();
-    return data;
+    return await response.json();
   } catch (error) {
     console.error('API Connection Error:', error);
     throw error;
