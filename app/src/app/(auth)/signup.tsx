@@ -71,15 +71,9 @@ function GlassCard({
         style,
       ]}
     >
-      {/*
-        Plain BlurView on Android silently ignores `intensity` unless you
-        pass experimentalBlurMethod — without it Android renders a flat
-        solid tint instead of an actual blur, making the card look white.
-      */}
       <BlurView
         intensity={14}
         tint="light"
-        experimentalBlurMethod="dimezisBlurView"
         style={{ borderRadius: radius }}
       >
         {/* soft sky/green tint instead of flat white so bubbles read through in color */}

@@ -76,16 +76,9 @@ function GlassCard({
         style,
       ]}
     >
-      {/*
-        Plain BlurView on Android silently ignores `intensity` unless you
-        pass experimentalBlurMethod — without it Android renders a flat
-        solid tint instead of an actual blur, which is why the card kept
-        looking white no matter how low intensity was dropped.
-      */}
       <BlurView
         intensity={14}
         tint="light"
-        experimentalBlurMethod="dimezisBlurView"
         style={{ borderRadius: radius }}
       >
         {/* soft sky/green tint instead of flat white so bubbles read through in color, not just grey */}
@@ -580,36 +573,36 @@ export default function Login() {
                           borderRadius: 12,
                         }}
                       >
-                      <TouchableOpacity
-                        className="h-10 items-center justify-center"
-                        style={{ borderRadius: 12, overflow: 'hidden' }}
-                        onPress={() => switchMethod('email')}
-                      >
-                        {loginMethod === 'email' ? (
-                          <LinearGradient
-                            colors={[BRAND_GREEN_LIGHT, BRAND_GREEN_DARK]}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 0 }}
-                            style={{
-                              position: 'absolute',
-                              top: 0,
-                              left: 0,
-                              right: 0,
-                              bottom: 0,
-                              borderRadius: 12,
-                            }}
-                          />
-                        ) : null}
-
-                        <Text
-                          className="text-sm font-semibold"
-                          style={{
-                            color: loginMethod === 'email' ? '#FFFFFF' : TEXT_MUTED,
-                          }}
+                        <TouchableOpacity
+                          className="h-10 items-center justify-center"
+                          style={{ borderRadius: 12, overflow: 'hidden' }}
+                          onPress={() => switchMethod('email')}
                         >
-                          Email
-                        </Text>
-                      </TouchableOpacity>
+                          {loginMethod === 'email' ? (
+                            <LinearGradient
+                              colors={[BRAND_GREEN_LIGHT, BRAND_GREEN_DARK]}
+                              start={{ x: 0, y: 0 }}
+                              end={{ x: 1, y: 0 }}
+                              style={{
+                                position: 'absolute',
+                                top: 0,
+                                left: 0,
+                                right: 0,
+                                bottom: 0,
+                                borderRadius: 12,
+                              }}
+                            />
+                          ) : null}
+
+                          <Text
+                            className="text-sm font-semibold"
+                            style={{
+                              color: loginMethod === 'email' ? '#FFFFFF' : TEXT_MUTED,
+                            }}
+                          >
+                            Email
+                          </Text>
+                        </TouchableOpacity>
                       </View>
 
                       <View
@@ -623,36 +616,36 @@ export default function Login() {
                           borderRadius: 12,
                         }}
                       >
-                      <TouchableOpacity
-                        className="h-10 items-center justify-center"
-                        style={{ borderRadius: 12, overflow: 'hidden' }}
-                        onPress={() => switchMethod('phone')}
-                      >
-                        {loginMethod === 'phone' ? (
-                          <LinearGradient
-                            colors={[BRAND_GREEN_LIGHT, BRAND_GREEN_DARK]}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 0 }}
-                            style={{
-                              position: 'absolute',
-                              top: 0,
-                              left: 0,
-                              right: 0,
-                              bottom: 0,
-                              borderRadius: 12,
-                            }}
-                          />
-                        ) : null}
-
-                        <Text
-                          className="text-sm font-semibold"
-                          style={{
-                            color: loginMethod === 'phone' ? '#FFFFFF' : TEXT_MUTED,
-                          }}
+                        <TouchableOpacity
+                          className="h-10 items-center justify-center"
+                          style={{ borderRadius: 12, overflow: 'hidden' }}
+                          onPress={() => switchMethod('phone')}
                         >
-                          Phone
-                        </Text>
-                      </TouchableOpacity>
+                          {loginMethod === 'phone' ? (
+                            <LinearGradient
+                              colors={[BRAND_GREEN_LIGHT, BRAND_GREEN_DARK]}
+                              start={{ x: 0, y: 0 }}
+                              end={{ x: 1, y: 0 }}
+                              style={{
+                                position: 'absolute',
+                                top: 0,
+                                left: 0,
+                                right: 0,
+                                bottom: 0,
+                                borderRadius: 12,
+                              }}
+                            />
+                          ) : null}
+
+                          <Text
+                            className="text-sm font-semibold"
+                            style={{
+                              color: loginMethod === 'phone' ? '#FFFFFF' : TEXT_MUTED,
+                            }}
+                          >
+                            Phone
+                          </Text>
+                        </TouchableOpacity>
                       </View>
                     </View>
                   </View>
