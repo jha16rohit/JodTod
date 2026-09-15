@@ -26,7 +26,7 @@ const { width: SCREEN_W } = Dimensions.get('window');
 type Step = 'form' | 'otp' | 'verifying' | 'verified';
 
 // ---------------------------------------------------------------------------
-// Palette — clean white card, single vivid green accent, no heavy tinted glass
+// Palette
 // ---------------------------------------------------------------------------
 
 const BRAND_GREEN_LIGHT = '#00E6A8';
@@ -39,61 +39,44 @@ const TEXT_MUTED = '#4B5A66';
 const HEADER_TITLE = '#0B3D62';
 const HEADER_SUB = '#2A5A82';
 
-// Lowered from 0.38 / 0.6 so the bubble background tints through the inputs
-const INPUT_BG = 'rgba(255,255,255,0.18)';
 const INPUT_BORDER = 'rgba(255,255,255,0.45)';
 
+// Horizontal inset used inside the full-width card so text never sits under
+// the phone's rounded screen corners
+const CARD_PADDING_H = 26;
+
 // ---------------------------------------------------------------------------
-// Glass card — blurred and translucent so the bubble background's own color
-// shows through it, instead of reading as a flat white box
+// Glass card — same translucent-blur recipe as profile.tsx (bg-white/20 +
+// BlurView + inner bg-white/25), so the page background shows through the
+// card instead of hiding behind a flat opaque panel.
+// `className` lets each call site control corner rounding (e.g. only the
+// top corners for a full-page panel that runs to the bottom of the screen).
 // ---------------------------------------------------------------------------
 
 function GlassCard({
   children,
-  radius = 28,
+  className = 'rounded-[28px]',
   style,
 }: {
   children: ReactNode;
-  radius?: number;
+  className?: string;
   style?: any;
 }) {
   return (
     <View
-      style={[
-        {
-          borderRadius: radius,
-          borderWidth: 1,
-          borderColor: 'rgba(255,255,255,0.35)',
-          shadowColor: '#5FA8B4',
-          shadowOpacity: 0.25,
-          shadowRadius: 24,
-          shadowOffset: { width: 0, height: 10 },
-          elevation: 10,
-          overflow: 'hidden',
-        },
-        style,
-      ]}
+      className={`overflow-hidden border border-white/40 bg-white/20 ${className}`}
+      style={style}
     >
-      <BlurView
-        intensity={14}
-        tint="light"
-        style={{ borderRadius: radius }}
-      >
-        {/* soft sky/green tint instead of flat white so bubbles read through in color, not just grey */}
-        <LinearGradient
-          colors={['rgba(255,255,255,0.10)', 'rgba(210,240,230,0.08)']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        >
-          {children}
-        </LinearGradient>
-      </BlurView>
+      <BlurView intensity={20} tint="light" className="absolute inset-0" />
+
+      <View className="bg-white/25">{children}</View>
     </View>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Simple pill input — light grey fill, hairline border, icon + text
+// Simple pill input — translucent white fill, hairline border, icon + text
+// (matches the glass look used for icon containers in profile.tsx)
 // ---------------------------------------------------------------------------
 
 function GlassInput({
@@ -105,16 +88,8 @@ function GlassInput({
 }) {
   return (
     <View
-      style={[
-        {
-          borderRadius: 16,
-          backgroundColor: INPUT_BG,
-          borderWidth: 1,
-          borderColor: INPUT_BORDER,
-          overflow: 'hidden',
-        },
-        style,
-      ]}
+      className="overflow-hidden rounded-2xl border border-white/40 bg-white/30"
+      style={style}
     >
       {children}
     </View>
@@ -212,7 +187,7 @@ function GoogleGlyph({ size = 18 }: { size?: number }) {
     </Svg>
   );
 }
-// reference screenshot: no border, opaque white, icon + label, even shadow)
+// reference screenshot: no border, translucent, icon + label, even shadow)
 // ---------------------------------------------------------------------------
 
 const SOCIAL_HEIGHT = 50;
@@ -231,16 +206,10 @@ function SocialButton({
     <TouchableOpacity
       onPress={onPress}
       activeOpacity={0.85}
-      className="flex-1 flex-row items-center justify-center gap-2"
+      className="flex-1 flex-row items-center justify-center gap-2 border border-white/40 bg-white/30"
       style={{
         height: SOCIAL_HEIGHT,
         borderRadius: SOCIAL_RADIUS,
-        backgroundColor: '#FFFFFF',
-        shadowColor: '#2A5A82',
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        shadowOffset: { width: 0, height: 3 },
-        elevation: 2,
       }}
     >
       {renderIcon()}
@@ -253,7 +222,8 @@ function SocialButton({
 
 // ---------------------------------------------------------------------------
 // Full-bleed bubble backdrop — this is the actual page background, it stays
-// visible the whole way down (no plain white page background anywhere)
+// visible the whole way down behind the translucent glass card (no plain
+// opaque page background anywhere)
 // ---------------------------------------------------------------------------
 
 function BubbleBackdrop({ children }: { children: ReactNode }) {
@@ -426,7 +396,7 @@ export default function Login() {
         <BubbleBackdrop>
           <ScrollView
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: 40, flexGrow: 1 }}
+            contentContainerStyle={{ flexGrow: 1 }}
           >
             {/* Header — full bleed photo, shown at full strength */}
             <View style={{ position: 'relative', width: SCREEN_W }}>
@@ -468,10 +438,18 @@ export default function Login() {
               </View>
             </View>
 
-            {/* Clean white login card, floated up slightly over the photo */}
-            <View style={{ marginTop: -28, marginHorizontal: 18 }}>
-              <GlassCard radius={28}>
-                <View className="px-6 pt-7 pb-8">
+            {/* Translucent glass login panel — full width, no side margins,
+                background image still shows through it like on profile.tsx,
+                and it stretches down to the bottom of the page */}
+            <View style={{ marginTop: -28, flex: 1 }}>
+              <GlassCard className="rounded-t-[28px]" style={{ flex: 1 }}>
+                <View
+                  style={{
+                    paddingHorizontal: CARD_PADDING_H,
+                    paddingTop: 28,
+                    paddingBottom: 32,
+                  }}
+                >
                   <Text
                     className="text-2xl font-bold mb-5"
                     style={{ letterSpacing: 0.4, color: TEXT_DARK }}
@@ -480,16 +458,7 @@ export default function Login() {
                   </Text>
 
                   {/* Email / Phone toggle — light pill segmented control */}
-                  <View
-                    style={{
-                      marginBottom: 20,
-                      padding: 4,
-                      borderRadius: 16,
-                      backgroundColor: INPUT_BG,
-                      borderWidth: 1,
-                      borderColor: INPUT_BORDER,
-                    }}
-                  >
+                  <View className="mb-5 rounded-2xl border border-white/40 bg-white/30 p-1">
                     <View className="flex-row">
                       <View
                         className="flex-1"
@@ -718,7 +687,7 @@ export default function Login() {
                     <View className="flex-1 h-px" style={{ backgroundColor: INPUT_BORDER }} />
                   </View>
 
-                  {/* Social buttons — solid white pills with soft shadow, matching reference */}
+                  {/* Social buttons — translucent glass pills, matching profile.tsx icon containers */}
                   <View className="flex-row gap-3 mb-6">
                     <SocialButton renderIcon={() => <GoogleGlyph size={18} />} label="Google" />
                     <SocialButton
@@ -755,7 +724,7 @@ export default function Login() {
             <View className="flex-1 px-6 pt-[60px]">
               <View className="flex-1 items-center justify-center">
                 {step === 'otp' && (
-                  <GlassCard radius={28} style={{ width: '100%' }}>
+                  <GlassCard style={{ width: '100%' }}>
                     <View className="px-7 py-10 items-center">
                       <Text className="text-2xl font-bold mb-3" style={{ color: TEXT_DARK }}>
                         Verify your number
@@ -774,14 +743,13 @@ export default function Login() {
                         {digits.map((digit, index) => (
                           <View
                             key={index}
+                            className={`overflow-hidden rounded-2xl border ${
+                              digit ? 'border-[1.6px] bg-white/40' : 'border bg-white/25'
+                            }`}
                             style={{
                               width: 46,
                               height: 58,
-                              borderRadius: 14,
-                              backgroundColor: digit ? '#F0FBF6' : INPUT_BG,
-                              borderWidth: 1.6,
                               borderColor: digit ? BRAND_GREEN : INPUT_BORDER,
-                              overflow: 'hidden',
                             }}
                           >
                             <TextInput
@@ -833,7 +801,7 @@ export default function Login() {
                 )}
 
                 {(step === 'verifying' || step === 'verified') && (
-                  <GlassCard radius={28} style={{ width: '100%' }}>
+                  <GlassCard style={{ width: '100%' }}>
                     <View className="px-8 py-12 items-center">
                       {step === 'verifying' ? (
                         <>
