@@ -1,9 +1,10 @@
 import "../../global.css";
 
 import { useEffect, useState } from "react";
+import { Platform } from "react-native";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import { NavigationBar } from "expo-navigation-bar";
+import * as NavigationBar from "expo-navigation-bar";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -11,11 +12,15 @@ export default function RootLayout() {
   const [appIsReady, setAppIsReady] = useState(false);
 
   useEffect(() => {
-    try {
-      NavigationBar.setHidden(false);
-      NavigationBar.setStyle("light");
-    } catch (e) {
-      console.warn("Navigation bar configuration warning:", e);
+    if (Platform.OS === "android") {
+      try {
+        NavigationBar.setStyle("dark");
+      } catch (e) {
+        console.warn(
+          "Android navigation bar configuration warning:",
+          e
+        );
+      }
     }
   }, []);
 
