@@ -313,6 +313,7 @@ export default function Signup() {
 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -327,8 +328,12 @@ export default function Signup() {
       setFormError('Enter your full name.');
       return;
     }
-    if (!email.trim()) {
-      setFormError('Enter your email address.');
+    if (!email.trim() && !phone.trim()) {
+      setFormError('Enter your email address or phone number.');
+      return;
+    }
+    if (phone.trim() && (phone.trim().length < 7 || phone.trim().length > 20)) {
+      setFormError('Enter a valid phone number.');
       return;
     }
     if (!password || password.length < 8) {
@@ -345,7 +350,12 @@ export default function Signup() {
     }
     setBusy(true);
     try {
-      await signup({ name: fullName.trim(), email: email.trim(), password });
+      await signup({
+        name: fullName.trim(),
+        email: email.trim() || undefined,
+        phone: phone.trim() || undefined,
+        password,
+      });
       // AuthContext is now authenticated → (auth) layout redirects to /(tabs).
       router.replace('/(tabs)' as any);
     } catch (e) {
@@ -454,6 +464,31 @@ export default function Signup() {
                       value={email}
                       onChangeText={setEmail}
                       keyboardType="email-address"
+                      autoCapitalize="none"
+                    />
+                  </View>
+                </GlassInput>
+
+                {/* Phone (optional — either email or phone is required) */}
+                <Text className="text-[13px] mb-2 font-semibold" style={{ color: TEXT_MUTED }}>
+                  Phone number (optional)
+                </Text>
+                <GlassInput style={{ marginBottom: 18 }}>
+                  <View className="flex-row items-center px-3.5 h-[52px]">
+                    <Ionicons
+                      name="call-outline"
+                      size={18}
+                      color={BRAND_GREEN_DARK}
+                      style={{ marginRight: 10 }}
+                    />
+                    <TextInput
+                      className="flex-1 text-sm"
+                      style={{ color: TEXT_DARK }}
+                      placeholder="Enter your phone number"
+                      placeholderTextColor="rgba(20,33,43,0.4)"
+                      value={phone}
+                      onChangeText={setPhone}
+                      keyboardType="phone-pad"
                       autoCapitalize="none"
                     />
                   </View>

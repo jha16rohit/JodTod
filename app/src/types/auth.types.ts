@@ -54,6 +54,10 @@ export interface SignupRequest {
   phone?: string | null;
   password?: string | null;
   device_id?: string | null;
+  /** Optional device metadata for the initial backend session. */
+  device_name?: string | null;
+  platform?: string | null;
+  app_version?: string | null;
 }
 
 export interface LoginRequest {

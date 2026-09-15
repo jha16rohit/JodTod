@@ -19,6 +19,12 @@
       "expo-router",
       "expo-asset",
       "expo-secure-store"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "6b8c4717-46de-4342-8318-3d5b3308660e"
+      }
+    }
   }
 }

@@ -29,6 +29,8 @@
  */
 
 import * as Device from "expo-device";
+import Constants from "expo-constants";
+import { Platform } from "react-native";
 
 import {
   apiGetCurrentUser,
@@ -129,6 +131,74 @@ async function requireDeviceId(explicit?: string | null): Promise<string> {
   return deviceId;
 }
 
+/**
+ * Resolve optional device metadata for the initial backend session.
+ *
+ * These values are derived by the app — the user is never asked to
+ * enter them. An explicit caller-supplied value wins; otherwise the
+ * Expo device/platform/app configuration is used. Values are truncated
+ * to the backend column limits (device_name 255, platform 32,
+ * app_version 64) and omitted when unavailable.
+ */
+function resolveDeviceName(explicit?: string | null): string | undefined {
+  if (explicit?.trim()) {
+    return explicit.trim().slice(0, 255);
+  }
+
+  try {
+    const name = Device.deviceName ?? Device.modelName ?? null;
+
+    if (name?.trim()) {
+      return name.trim().slice(0, 255);
+    }
+  } catch {
+    // Device information is best-effort.
+  }
+
+  return undefined;
+}
+
+function resolvePlatform(explicit?: string | null): string | undefined {
+  if (explicit?.trim()) {
+    return explicit.trim().slice(0, 32);
+  }
+
+  try {
+    const os = Device.osName ?? Platform.OS ?? null;
+
+    if (os?.trim()) {
+      return os.trim().slice(0, 32);
+    }
+  } catch {
+    if (Platform.OS?.trim()) {
+      return Platform.OS.trim().slice(0, 32);
+    }
+  }
+
+  return undefined;
+}
+
+function resolveAppVersion(explicit?: string | null): string | undefined {
+  if (explicit?.trim()) {
+    return explicit.trim().slice(0, 64);
+  }
+
+  try {
+    const version =
+      Constants.expoConfig?.version ??
+      (Constants as { nativeAppVersion?: string | null }).nativeAppVersion ??
+      null;
+
+    if (version?.trim()) {
+      return version.trim().slice(0, 64);
+    }
+  } catch {
+    // App version is best-effort.
+  }
+
+  return undefined;
+}
+
 // ---------------------------------------------------------------------------
 // Password flows
 // ---------------------------------------------------------------------------
@@ -159,6 +229,15 @@ export async function signup(input: SignupRequest): Promise<AuthResponse> {
     );
   }
 
+  const phone = input.phone?.trim() || undefined;
+
+  if (phone && (phone.length < 7 || phone.length > 20)) {
+    throw new AuthError(
+      "Enter a valid phone number.",
+      "VALIDATION_ERROR",
+    );
+  }
+
   // ---------------------------------------------------------
   // Password validation
   // ---------------------------------------------------------
@@ -185,11 +264,17 @@ export async function signup(input: SignupRequest): Promise<AuthResponse> {
 
     email: input.email?.trim().toLowerCase() || undefined,
 
-    phone: input.phone?.trim() || undefined,
+    phone,
 
     password: input.password,
 
     device_id: deviceId,
+
+    device_name: resolveDeviceName(input.device_name),
+
+    platform: resolvePlatform(input.platform),
+
+    app_version: resolveAppVersion(input.app_version),
   });
 
   // ---------------------------------------------------------
