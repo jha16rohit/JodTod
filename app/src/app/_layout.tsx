@@ -1,8 +1,9 @@
 import "../../global.css";
-import { useEffect, useState } from 'react';
-import { Stack } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
-import { useFonts } from 'expo-font';
+
+import { useEffect, useState } from "react";
+import { Stack } from "expo-router";
+import * as SplashScreen from "expo-splash-screen";
+import { NavigationBar } from "expo-navigation-bar";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -10,15 +11,25 @@ export default function RootLayout() {
   const [appIsReady, setAppIsReady] = useState(false);
 
   useEffect(() => {
+    try {
+      NavigationBar.setHidden(false);
+      NavigationBar.setStyle("light");
+    } catch (e) {
+      console.warn("Navigation bar configuration warning:", e);
+    }
+  }, []);
+
+  useEffect(() => {
     async function prepare() {
       try {
-        // Preload any fonts/assets your AnimatedIntro needs here
+        // Load fonts/assets here if needed
       } catch (e) {
-        console.warn(e);
+        console.warn("App preparation warning:", e);
       } finally {
         setAppIsReady(true);
       }
     }
+
     prepare();
   }, []);
 

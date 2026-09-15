@@ -9,6 +9,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
+import { useRouter } from 'expo-router';
 
 const getGreeting = () => {
   const hour = new Date().getHours();
@@ -27,6 +28,7 @@ const getGreeting = () => {
 
   return 'Good Night';
 };
+
 
 const userName = 'Rohit';
 
@@ -93,6 +95,8 @@ const expenses = [
 ];
 
 export default function Home() {
+  const router = useRouter();
+
   return (
     <SafeAreaView
       edges={['top']}
@@ -105,65 +109,66 @@ export default function Home() {
       >
         {/* Header */}
         <View className="mb-6 flex-row items-center justify-between">
-  {/* Greeting */}
-  <View className="flex-row items-center">
-    
+          {/* Greeting */}
+          <View className="flex-row items-center">
 
-    <View>
-      <View className="flex-row items-center">
-        <Text className="text-[17px] font-semibold text-[#20B879]">
-          {getGreeting()},
-        </Text>
 
-        <Text className="ml-1.5 text-[23px] font-extrabold text-[#FF5A36]">
-          {userName}
-        </Text>
-      </View>
+            <View>
+              <View className="flex-row items-center">
+                <Text className="text-[17px] font-semibold text-[#20B879]">
+                  {getGreeting()},
+                </Text>
 
-      <Text className="mt-1 text-[11px] font-medium text-[#20B879]">
-        Split Smart. Stay Together.
-      </Text>
-    </View>
-  </View>
+                <Text className="ml-1.5 text-[23px] font-extrabold text-[#FF5A36]">
+                  {userName}
+                </Text>
+              </View>
 
-  {/* Header Actions */}
-  <View className="flex-row items-center gap-3">
-    <TouchableOpacity
-      activeOpacity={0.8}
-      className="h-11 w-11 items-center justify-center rounded-full border border-white/80 bg-white/70"
-    >
-      <Ionicons
-        name="search"
-        size={21}
-        color="#0B3D62"
-      />
-    </TouchableOpacity>
+              <Text className="mt-1 text-[11px] font-medium text-[#20B879]">
+                Split Smart. Stay Together.
+              </Text>
+            </View>
+          </View>
 
-    <TouchableOpacity
-      activeOpacity={0.8}
-      className="relative h-11 w-11 items-center justify-center rounded-full border border-white/80 bg-white/70"
-    >
-      <Ionicons
-        name="notifications"
-        size={21}
-        color="#0B3D62"
-      />
+          {/* Header Actions */}
+          <View className="flex-row items-center gap-3">
+            <TouchableOpacity
+              activeOpacity={0.8}
+              className="h-11 w-11 items-center justify-center rounded-full border border-white/80 bg-white/70"
+            >
+              <Ionicons
+                name="search"
+                size={21}
+                color="#0B3D62"
+              />
+            </TouchableOpacity>
 
-      <View className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full border-2 border-white bg-[#FF6548]" />
-    </TouchableOpacity>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              className="relative h-11 w-11 items-center justify-center rounded-full border border-white/80 bg-white/70"
+            >
+              <Ionicons
+                name="notifications"
+                size={21}
+                color="#0B3D62"
+              />
 
-    <TouchableOpacity
-      activeOpacity={0.8}
-      className="h-11 w-11 items-center justify-center overflow-hidden rounded-full border-2 border-[#6ED5B3] bg-[#E7F4F0]"
-    >
-      <Ionicons
-        name="person"
-        size={21}
-        color="#0B3D62"
-      />
-    </TouchableOpacity>
-  </View>
-</View>
+              <View className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full border-2 border-white bg-[#FF6548]" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.8}
+              className="h-11 w-11 items-center justify-center overflow-hidden rounded-full border-2 border-[#6ED5B3] bg-[#E7F4F0]"
+              onPress={() => router.push('/profile')}
+            >
+              <Ionicons
+                name="person"
+                size={21}
+                color="#0B3D62"
+              />
+            </TouchableOpacity>
+          </View>
+        </View>
 
         {/* Balance Glass Card */}
         <View className="mb-7 overflow-hidden rounded-[30px] border border-white/60">
@@ -297,9 +302,8 @@ export default function Home() {
             <TouchableOpacity
               key={group.name}
               activeOpacity={0.9}
-              className={`mr-4 w-[270px] rounded-[28px] border border-white bg-white/85 p-5 ${
-                index === groups.length - 1 ? 'mr-0' : ''
-              }`}
+              className={`mr-4 w-[270px] rounded-[28px] border border-white bg-white/85 p-5 ${index === groups.length - 1 ? 'mr-0' : ''
+                }`}
             >
               <View className="mb-4 flex-row items-start justify-between">
                 <View
