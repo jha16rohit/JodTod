@@ -183,6 +183,11 @@ class Settings(BaseSettings):
     # ============================================================
     otp_provider: str = "mock"
     otp_provider_api_key: SecretStr | None = None
+    otp_rate_limit_max_per_hour: int = Field(
+        default=10,
+        ge=1,
+        le=1000,
+    )
 
     # ============================================================
     # EMAIL PROVIDER
@@ -326,6 +331,20 @@ class Settings(BaseSettings):
     @property
     def password_reset_expire_seconds(self) -> int:
         return self.password_reset_expire_minutes * 60
+
+    @property
+    def dev_otp_disclosure_allowed(self) -> bool:
+        """
+        Whether a generated OTP may be returned to the caller for
+        development convenience.
+
+        Strictly environment-gated: only non-production environments
+        using a mock provider qualify. Production responses and
+        production logs must never contain an OTP.
+        """
+        if self.environment == "production":
+            return False
+        return self.otp_provider == "mock" or self.email_provider == "mock"
 
     # ============================================================
     # SECRET GENERATION

@@ -15,7 +15,7 @@ const MIN_SPLASH_MS = 3700;
 
 export default function Index() {
   const router = useRouter();
-  const { isLoading, isAuthenticated } = useAuth();
+  const { isLoading, isAuthenticated, isVerificationPending } = useAuth();
   const [splashDone, setSplashDone] = useState(false);
 
   useEffect(() => {
@@ -25,12 +25,14 @@ export default function Index() {
 
   useEffect(() => {
     if (isLoading || !splashDone) return;
-    if (isAuthenticated) {
+    if (isVerificationPending) {
+      router.replace("/verify-email");
+    } else if (isAuthenticated) {
       router.replace("/(tabs)");
     } else {
       router.replace("/onboarding");
     }
-  }, [isLoading, isAuthenticated, splashDone, router]);
+  }, [isLoading, isAuthenticated, isVerificationPending, splashDone, router]);
 
   return <AnimatedIntro autoNavigate={false} />;
 }

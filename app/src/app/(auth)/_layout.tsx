@@ -4,15 +4,27 @@
  * - If authenticated: redirect out to the protected app.
  * - If unauthenticated/offline-without-session: allow auth screens.
  */
-import { Redirect, Stack } from "expo-router";
+import { Redirect, Stack, usePathname } from "expo-router";
 import { useAuth } from "../../context/AuthContext";
 import AuthLoadingScreen from "../../components/auth/AuthLoadingScreen";
 
 export default function AuthLayout() {
-  const { isLoading, isAuthenticated } = useAuth();
+  const { isLoading, isAuthenticated, isVerificationPending } = useAuth();
+  const pathname = usePathname();
 
   if (isLoading) {
     return <AuthLoadingScreen message="Checking your session…" />;
+  }
+
+  if (isVerificationPending) {
+    if (pathname === "/verify-email") {
+      return (
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="verify-email" />
+        </Stack>
+      );
+    }
+    return <Redirect href="/verify-email" />;
   }
 
   if (isAuthenticated) {

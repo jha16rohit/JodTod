@@ -120,12 +120,17 @@ class RefreshTokenRequest(BaseModel):
     """
     Request for rotating the current refresh token and issuing
     a new access token.
+
+    session_id is optional but recommended: supplying it enables
+    full rotation-reuse detection on the backend.
     """
 
     refresh_token: str = Field(
         min_length=1,
         max_length=4096,
     )
+
+    session_id: Optional[UUID] = None
 
 
 # LOGOUT
@@ -164,6 +169,9 @@ class SendOTPRequest(BaseModel):
 class VerifyOTPRequest(BaseModel):
     """
     Verify an OTP previously issued for a destination/purpose.
+
+    Device fields are used only when verification opens a session
+    (purpose PHONE_LOGIN); they are ignored otherwise.
     """
 
     destination: str = Field(
@@ -178,6 +186,26 @@ class VerifyOTPRequest(BaseModel):
 
     purpose: OTPPurpose
 
+    device_id: Optional[str] = Field(
+        default=None,
+        max_length=255,
+    )
+
+    device_name: Optional[str] = Field(
+        default=None,
+        max_length=255,
+    )
+
+    platform: Optional[str] = Field(
+        default=None,
+        max_length=32,
+    )
+
+    app_version: Optional[str] = Field(
+        default=None,
+        max_length=64,
+    )
+
 
 class OTPResponse(BaseModel):
     """
@@ -189,6 +217,46 @@ class OTPResponse(BaseModel):
     expires_at: Optional[datetime] = None
 
     retry_after_seconds: Optional[int] = None
+
+    verified: bool = False
+
+    dev_code: Optional[str] = Field(
+        default=None,
+        description=(
+            "Development-only echo of the generated code. Populated "
+            "exclusively when the environment is non-production AND a "
+            "mock delivery provider handled the channel. Always null "
+            "in production."
+        ),
+    )
+
+
+# EMAIL VERIFICATION (6-digit OTP)
+class SendEmailVerificationRequest(BaseModel):
+    """
+    Request a 6-digit verification code for an email address.
+    """
+
+    email: EmailStr
+
+
+class VerifyEmailCodeRequest(BaseModel):
+    """
+    Verify an email address with the 6-digit code.
+
+    NOTE: this replaces the legacy token-only VerifyEmailRequest
+    contract. A bare token cannot safely resolve an account (the
+    same short code could exist for several destinations), so the
+    email is required alongside the code. Path
+    POST /api/auth/verify-email is preserved.
+    """
+
+    email: EmailStr
+
+    code: str = Field(
+        min_length=4,
+        max_length=10,
+    )
 
 
 # EMAIL VERIFICATION
@@ -253,6 +321,107 @@ class AuthResponse(BaseModel):
     user: AuthenticatedUser
 
     tokens: TokenResponse
+
+
+# PASSWORD RECOVERY (6-digit OTP)
+class ForgotPasswordRequest(BaseModel):
+    """
+    Request a password-reset code.
+
+    identifier accepts an email address or a phone number; the
+    response is identical whether or not an account exists.
+    """
+
+    identifier: str = Field(
+        min_length=3,
+        max_length=255,
+    )
+
+
+class ResetPasswordRequest(BaseModel):
+    """
+    Set a new password using a verified reset code.
+    """
+
+    identifier: str = Field(
+        min_length=3,
+        max_length=255,
+    )
+
+    code: str = Field(
+        min_length=4,
+        max_length=10,
+    )
+
+    new_password: str = Field(
+        min_length=8,
+        max_length=128,
+    )
+
+
+# OAUTH (Google / Apple)
+class OAuthRequest(BaseModel):
+    """
+    Authenticate with a provider-issued ID token.
+
+    The backend validates the token (issuer, audience, expiry,
+    subject, signature) and never trusts client-supplied profile
+    fields. Device fields seed the resulting JodTod session.
+    """
+
+    id_token: str = Field(
+        min_length=1,
+        max_length=8192,
+    )
+
+    device_id: Optional[str] = Field(
+        default=None,
+        max_length=255,
+    )
+
+    device_name: Optional[str] = Field(
+        default=None,
+        max_length=255,
+    )
+
+    platform: Optional[str] = Field(
+        default=None,
+        max_length=32,
+    )
+
+    app_version: Optional[str] = Field(
+        default=None,
+        max_length=64,
+    )
+
+
+# DEVICE / SESSION MANAGEMENT
+class SessionInfo(BaseModel):
+    """
+    Safe per-session summary for device-management screens.
+    """
+
+    model_config = ConfigDict(
+        from_attributes=True
+    )
+
+    id: UUID
+    device_id: str
+    device_name: Optional[str] = None
+    platform: Optional[str] = None
+    app_version: Optional[str] = None
+    expires_at: datetime
+    last_used_at: Optional[datetime] = None
+    is_active: bool
+    revoked_at: Optional[datetime] = None
+    created_at: datetime
+    current: bool = False
+
+
+class SessionListResponse(BaseModel):
+    """All sessions belonging to the authenticated user."""
+
+    sessions: list[SessionInfo]
 
 
 # CURRENT USER

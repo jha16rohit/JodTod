@@ -1,7 +1,7 @@
 # backend/schemas/user.py
 
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -88,4 +88,35 @@ class AuthenticatedUser(UserPublic):
     fields can be added later without changing public responses.
     """
 
-    pass
+    # Linked provider flags (additive; derived server-side from the
+    # stored provider subjects, never from client input).
+    google_linked: bool = False
+    apple_linked: bool = False
+    # The backend, not the app, decides whether this account can enter the
+    # protected application and which existing OTP flow must complete.
+    verification_required: bool = False
+    verification_method: Literal["email", "phone"] | None = None
+
+
+def with_provider_flags(
+    schema: AuthenticatedUser,
+    *,
+    google_subject: str | None,
+    apple_subject: str | None,
+) -> AuthenticatedUser:
+    """Attach linked-provider flags to an authenticated user schema."""
+    schema.google_linked = bool(google_subject)
+    schema.apple_linked = bool(apple_subject)
+    # Signup dispatches email verification when an email is supplied;
+    # otherwise it dispatches phone verification. This preserves the selected
+    # signup channel and never requires both channels for one account.
+    if schema.email:
+        schema.verification_method = "email"
+        schema.verification_required = not schema.email_verified
+    elif schema.phone:
+        schema.verification_method = "phone"
+        schema.verification_required = not schema.phone_verified
+    else:
+        schema.verification_method = None
+        schema.verification_required = False
+    return schema

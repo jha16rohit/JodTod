@@ -33,5 +33,8 @@ async def signup(
     return await create_account(
         db=db,
         payload=payload,
-        device_id=payload.device_id
+        device_id=payload.device_id,
+        device_name=payload.device_name,
+        platform=payload.platform,
+        app_version=payload.app_version,
     )

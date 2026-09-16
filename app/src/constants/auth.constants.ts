@@ -70,6 +70,7 @@ export const AUTH_API_PATHS = {
   LOGOUT: "/auth/logout",
 
   SEND_OTP: "/auth/send-otp",
+  SEND_EMAIL_VERIFICATION: "/auth/send-email-verification",
   VERIFY_OTP: "/auth/verify-otp",
   VERIFY_EMAIL: "/auth/verify-email",
 
@@ -120,6 +121,13 @@ export const AUTH_STORAGE_KEYS = {
    * authentication service, not hardcoded.
    */
   DEVICE_ID: "jodtod.auth.device_id",
+
+  /**
+   * Timestamp of the last successful online authentication.
+   * Used for offline session eligibility policy.
+   */
+  LAST_ONLINE_AUTHENTICATION: "jodtod.auth.last_online_auth",
+
 } as const;
 
 // ---------------------------------------------------------------------------

@@ -22,6 +22,16 @@ export interface StoredAuthTokens {
   sessionId: string | null;
 }
 
+/**
+ * Cached offline-session metadata.
+ *
+ * Contains the timestamp of the last successful online authentication,
+ * used to determine whether local offline access is still eligible.
+ */
+export interface OfflineSessionMetadata {
+  lastOnlineAuthentication: number; // epoch ms
+}
+
 export interface SaveAuthTokensInput {
   accessToken: string;
   refreshToken: string;
@@ -93,6 +103,41 @@ export async function clearAuthTokens(): Promise<void> {
     safeSecureDelete(AUTH_STORAGE_KEYS.REFRESH_TOKEN),
     safeSecureDelete(AUTH_STORAGE_KEYS.SESSION_ID),
   ]);
+}
+
+/**
+ * Save the timestamp of the last successful online authentication.
+ */
+export async function saveLastOnlineAuthentication(timestamp: number): Promise<void> {
+  try {
+    await AsyncStorage.setItem(AUTH_STORAGE_KEYS.LAST_ONLINE_AUTHENTICATION, String(timestamp));
+  } catch {
+    throw new AuthStorageError("Failed to persist offline session metadata.");
+  }
+}
+
+/**
+ * Get the timestamp of the last successful online authentication.
+ */
+export async function getLastOnlineAuthentication(): Promise<number | null> {
+  try {
+    const raw = await AsyncStorage.getItem(AUTH_STORAGE_KEYS.LAST_ONLINE_AUTHENTICATION);
+    if (!raw) return null;
+    return parseInt(raw, 10);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Clear the offline-session metadata.
+ */
+export async function clearLastOnlineAuthentication(): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(AUTH_STORAGE_KEYS.LAST_ONLINE_AUTHENTICATION);
+  } catch {
+    // Treat as cleared.
+  }
 }
 
 // ---------------------------------------------------------------------------

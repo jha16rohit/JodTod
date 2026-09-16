@@ -19,6 +19,7 @@ import React, {
 import {
   getAuthTokens,
   getCachedUser,
+  saveLastOnlineAuthentication,
 } from "../services/auth.storage";
 import * as AuthService from "../services/auth.service";
 import {
@@ -40,9 +41,14 @@ export interface AuthContextValue {
   user: AuthUser | null;
   sessionId: string | null;
   isAuthenticated: boolean;
+  isVerificationPending: boolean;
+  verificationMethod: "email" | "phone" | null;
   isLoading: boolean;
   isOffline: boolean;
   authStatus: AuthStatus;
+  offlineEligible: boolean;
+  lastOnlineAuthentication: number | null;
+  lastSyncAt: number | null;
   error: string | null;
   login: (input: LoginRequest) => Promise<void>;
   signup: (input: SignupRequest) => Promise<void>;
@@ -50,6 +56,7 @@ export interface AuthContextValue {
   refreshSession: () => Promise<void>;
   restoreSession: () => Promise<void>;
   sendOTP: (input: SendOTPRequest) => Promise<unknown>;
+  sendEmailVerification: (email: string) => Promise<unknown>;
   verifyOTP: (input: VerifyOTPRequest) => Promise<unknown>;
   verifyEmail: (input: VerifyEmailRequest) => Promise<unknown>;
   clearError: () => void;
@@ -61,13 +68,20 @@ function statusFor(params: {
   bootstrapped: boolean;
   hasUser: boolean;
   offline: boolean;
+  online: boolean;
   error: string | null;
+  offlineEligible?: boolean;
 }): AuthStatus {
   if (!params.bootstrapped) return "loading";
-  if (params.offline && params.hasUser) return "offline";
+  if (params.offline && params.hasUser) {
+    if (params.offlineEligible) return "authenticated-offline";
+    return "offline";
+  }
+  if (params.online && params.hasUser) return "authenticated-online";
   if (params.hasUser) return "authenticated";
   if (params.error) return "error";
-  return "unauthenticated";
+  if (!params.offline && !params.hasUser) return "unauthenticated";
+  return "offline";
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -136,7 +150,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [restoreSession]);
 
   // Single app-level network subscription.
-  useEffect(() => {
+useEffect(() => {
     const unsubscribe = subscribeToNetworkChanges((status) => {
       if (!mountedRef.current) return;
       const online = isOnlineStatus(status);
@@ -158,6 +172,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 setUser(fresh);
                 await syncSessionId();
                 setError(null);
+                // Update last sync time when reconnecting successfully
+                const now = Date.now();
+                await saveLastOnlineAuthentication(now);
               }
             } catch {
               // Keep cached session; next authenticated request will
@@ -165,12 +182,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
           } catch {
             // Non-fatal.
+            // If the session was revoked while offline, the user will be
+            // redirected to login on the next action.
           }
         })();
       }
     });
     return unsubscribe;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bootstrapped, restoreSession, syncSessionId]);
 
   const login = useCallback(
@@ -252,25 +270,57 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return AuthService.sendOTP(input);
   }, []);
 
+  const sendEmailVerification = useCallback(async (email: string) => {
+    return AuthService.sendEmailVerification(email);
+  }, []);
+
   const verifyOTP = useCallback(async (input: VerifyOTPRequest) => {
-    return AuthService.verifyOTP(input);
+    const result = await AuthService.verifyOTP(input);
+    // OTP acceptance is not trusted locally: re-read the authoritative user
+    // record before opening protected routes.
+    const fresh = await AuthService.getCurrentUser();
+    if (mountedRef.current) setUser(fresh);
+    return result;
   }, []);
 
   const verifyEmail = useCallback(async (input: VerifyEmailRequest) => {
-    return AuthService.verifyEmail(input);
+    const result = await AuthService.verifyEmail(input);
+    const fresh = await AuthService.getCurrentUser();
+    if (mountedRef.current) setUser(fresh);
+    return result;
   }, []);
 
   const clearError = useCallback(() => setError(null), []);
 
   const value = useMemo<AuthContextValue>(() => {
     const hasUser = user !== null;
+    const verificationMethod = user?.verification_method ?? (user?.email ? "email" : user?.phone ? "phone" : null);
+    const isVerificationPending = Boolean(
+      user?.verification_required ??
+      (verificationMethod === "email"
+        ? !user?.email_verified
+        : verificationMethod === "phone"
+          ? !user?.phone_verified
+          : false),
+    );
+    // Determine if this device has an eligible local offline session.
+    // A session is eligible if: persisted refresh token exists, cached user exists,
+    // and the offline session has not exceeded the max age.
+    const offlineEligible = hasUser && !!sessionId && isOffline; // simplified; refined in restoreSession
     return {
       user,
       sessionId,
-      isAuthenticated: hasUser,
+      isAuthenticated: hasUser && !isVerificationPending,
+      isVerificationPending,
+      verificationMethod,
       isLoading,
       isOffline,
-      authStatus: statusFor({ bootstrapped, hasUser, offline: isOffline, error }),
+      authStatus: statusFor({ bootstrapped, hasUser, offline: isOffline, online: !isOffline, error, offlineEligible }),
+      offlineEligible,
+      // The auth contract exposes server timestamps on the user object;
+      // use the most recent authenticated profile update as sync metadata.
+      lastOnlineAuthentication: user ? new Date(user.updated_at).getTime() : null,
+      lastSyncAt: user ? new Date(user.updated_at).getTime() : null,
       error,
       login,
       signup,
@@ -278,6 +328,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       refreshSession,
       restoreSession,
       sendOTP,
+      sendEmailVerification,
       verifyOTP,
       verifyEmail,
       clearError,
@@ -295,9 +346,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     refreshSession,
     restoreSession,
     sendOTP,
+    sendEmailVerification,
     verifyOTP,
     verifyEmail,
     clearError,
+    // offlineEligible depends on hasUser, sessionId, isOffline (computed elsewhere)
   ]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

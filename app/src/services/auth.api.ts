@@ -556,6 +556,13 @@ export async function apiSendOTP(input: SendOTPRequest): Promise<OTPResponse> {
   });
 }
 
+export async function apiSendEmailVerification(email: string): Promise<OTPResponse> {
+  return authRequest<OTPResponse>(AUTH_API_PATHS.SEND_EMAIL_VERIFICATION, {
+    method: "POST",
+    body: { email },
+  });
+}
+
 export async function apiVerifyOTP(
   input: VerifyOTPRequest,
 ): Promise<OTPResponse> {

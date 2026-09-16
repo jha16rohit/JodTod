@@ -129,10 +129,14 @@ const tabs = [
 }
 
 export default function TabsLayout() {
-  const { isLoading, isAuthenticated } = useAuth();
+  const { isLoading, isAuthenticated, isVerificationPending } = useAuth();
 
   if (isLoading) {
     return <AuthLoadingScreen message="Loading your account…" />;
+  }
+
+  if (isVerificationPending) {
+    return <Redirect href="/verify-email" />;
   }
 
   if (!isAuthenticated) {

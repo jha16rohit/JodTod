@@ -32,6 +32,9 @@ export interface User {
   account_status: AccountStatus;
   created_at: string;
   updated_at: string;
+  /** Backend-authoritative gate for protected application routes. */
+  verification_required: boolean;
+  verification_method: "email" | "phone" | null;
 }
 
 /** User representation returned after authentication / from GET /users/me. */
@@ -136,7 +139,8 @@ export interface OTPResponse {
 // ---------------------------------------------------------------------------
 
 export interface VerifyEmailRequest {
-  token: string;
+  email: string;
+  code: string;
 }
 
 export interface EmailVerificationResponse {
@@ -195,9 +199,16 @@ export interface OAuthLoginRequest {
 export type AuthStatus =
   | "loading"
   | "authenticated"
+  | "authenticated-online"
+  | "authenticated-offline"
+  | "authentication-initializing"
+  | "session-refreshing"
+  | "session-expired"
+  | "session-revoked"
   | "unauthenticated"
   | "offline"
-  | "error";
+  | "error"
+  | "network-unavailable";
 
 export interface NetworkStatus {
   isConnected: boolean;

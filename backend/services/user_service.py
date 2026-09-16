@@ -114,6 +114,34 @@ class UserService:
             value,
         )
 
+    @staticmethod
+    async def get_by_provider_subject(
+        db: AsyncSession,
+        provider: str,
+        subject: str,
+    ) -> Optional[User]:
+        """
+        Retrieve a user by linked OAuth provider subject.
+
+        provider is "google" or "apple"; the subject is the
+        provider-stable user identifier (never an email or name).
+        """
+
+        if not subject:
+            return None
+
+        column = (
+            User.google_subject
+            if provider == "google"
+            else User.apple_subject
+        )
+
+        return await db.scalar(
+            select(User).where(
+                column == subject.strip()
+            )
+        )
+
     # ============================================================
     # DUPLICATE DETECTION
     # ============================================================

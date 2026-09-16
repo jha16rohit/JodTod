@@ -7,6 +7,7 @@ import * as SplashScreen from "expo-splash-screen";
 import * as NavigationBar from "expo-navigation-bar";
 
 import { AuthProvider } from "../context/AuthContext";
+import OfflineIndicator from "../components/auth/OfflineIndicator";
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -59,6 +60,7 @@ export default function RootLayout() {
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(tabs)" />
       </Stack>
+      <OfflineIndicator />
     </AuthProvider>
   );
 }

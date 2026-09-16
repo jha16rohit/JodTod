@@ -309,7 +309,7 @@ function HeaderVisual({ height }: { height: number }) {
 
 export default function Signup() {
   const router = useRouter();
-  const { signup, isLoading: authLoading } = useAuth();
+  const { signup, logout, isLoading: authLoading } = useAuth();
 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -357,7 +357,10 @@ export default function Signup() {
         password,
       });
       // AuthContext is now authenticated → (auth) layout redirects to /(tabs).
-      router.replace('/(tabs)' as any);
+      // The backend has issued the selected channel's OTP. Revoke this
+      // bootstrap session so verification happens only after a real login.
+      await logout();
+      router.replace('/login' as any);
     } catch (e) {
       setFormError(e instanceof Error ? e.message : 'Signup failed. Please try again.');
     } finally {

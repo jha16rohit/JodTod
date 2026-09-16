@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 from typing import Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -61,6 +61,57 @@ class SessionService:
     @staticmethod
     def utc_now() -> datetime:
         return datetime.now(timezone.utc)
+
+    # ============================================================
+    # ISSUE SESSION (full device metadata)
+    # ============================================================
+
+    @staticmethod
+    async def issue_session(
+        db: AsyncSession,
+        user: User,
+        device_id: str,
+        device_name: str | None = None,
+        platform: str | None = None,
+        app_version: str | None = None,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> tuple[UserSession, str]:
+        """
+        Create an authenticated device session with full metadata.
+
+        Shared helper for authentication flows added after signup/login
+        (phone OTP login, OAuth login). The caller owns the surrounding
+        transaction; this method only flushes.
+
+        Returns (session, raw_refresh_token). Only the hash is stored.
+        """
+        now = SessionService.utc_now()
+        refresh_token = TokenService.generate_refresh_token()
+
+        session = UserSession(
+            user_id=user.id,
+            device_id=device_id,
+            device_name=device_name,
+            platform=platform,
+            app_version=app_version,
+            refresh_token_hash=TokenService.hash_refresh_token(
+                refresh_token
+            ),
+            token_family_id=uuid4(),
+            expires_at=TokenService.get_refresh_expiry(),
+            last_used_at=now,
+            revoked_at=None,
+            revoke_reason=None,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            is_active=True,
+        )
+
+        db.add(session)
+        await db.flush()
+
+        return session, refresh_token
 
     # ============================================================
     # CREATE SESSION
@@ -151,6 +202,22 @@ class SessionService:
                 UserSession.user_id == user_id,
             )
         )
+
+    @staticmethod
+    async def list_user_sessions(
+        db: AsyncSession,
+        user_id: UUID,
+    ) -> list[UserSession]:
+        """
+        List all sessions belonging to a user, newest first
+        (for device/session management screens).
+        """
+        result = await db.execute(
+            select(UserSession)
+            .where(UserSession.user_id == user_id)
+            .order_by(UserSession.created_at.desc())
+        )
+        return list(result.scalars().all())
 
     # ============================================================
     # SESSION VALIDATION

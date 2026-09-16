@@ -476,6 +476,7 @@ export default function Login() {
       })) as { message?: string };
       setOtpMessage(result?.message ?? 'Number verified.');
       setStep('verified');
+      router.replace('/(tabs)' as any);
     } catch (e) {
       setStep('otp');
       setFormError(e instanceof Error ? e.message : 'Invalid code. Please try again.');
@@ -985,10 +986,17 @@ export default function Login() {
                           <Text className="text-lg font-bold mb-2" style={{ color: TEXT_DARK }}>
                             Verified!
                           </Text>
-                          <Text className="text-[13px] text-center" style={{ color: TEXT_MUTED }}>
-                            {otpMessage ?? 'Your number is verified.'}
-                            {'\n'}Return to login to continue — OTP alone does not sign you in yet.
-                          </Text>
+<Text className="text-[13px] text-center" style={{ color: TEXT_MUTED }}>
+                              {otpMessage ?? 'Your number is verified.'}
+                            </Text>
+                            <TouchableOpacity
+                              onPress={() => router.replace('/(tabs)' as any)}
+                              className="mt-2"
+                            >
+                              <Text className="text-[13px] font-bold" style={{ color: BRAND_GREEN_DARK }}>
+                                Continue
+                              </Text>
+                            </TouchableOpacity>
                           <TouchableOpacity
                             onPress={() => {
                               setDigits(Array(OTP_LENGTH).fill(''));

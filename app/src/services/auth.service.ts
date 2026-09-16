@@ -38,6 +38,7 @@ import {
   apiLogout,
   apiRefresh,
   apiSendOTP,
+  apiSendEmailVerification,
   apiSignup,
   apiVerifyEmail,
   apiVerifyOTP,
@@ -50,6 +51,8 @@ import {
   hasPersistedSession,
   saveAuthTokens,
   saveCachedUser,
+  saveLastOnlineAuthentication,
+  getLastOnlineAuthentication,
 } from "./auth.storage";
 
 import { AuthError } from "../types/auth.types";
@@ -69,8 +72,42 @@ import type {
   VerifyEmailRequest,
   VerifyOTPRequest,
 } from "../types/auth.types";
+import type { StoredAuthTokens } from "./auth.storage";
 
-// ---------------------------------------------------------------------------
+/**
+ * Maximum age (ms) for a local offline session to be considered eligible.
+ * After this age, the session is considered stale and the user must re-authenticate online.
+ * This is separate from backend refresh-token expiration.
+ */
+export const OFFLINE_SESSION_MAX_AGE = 7 * 24 * 60 * 60 * 1000 // 7 days
+
+/**
+ * Checks whether a local offline session is eligible for use.
+ *
+ * A session is eligible when ALL of the following hold:
+ *   - A persisted refresh token exists (session may be restorable).
+ *   - A cached user profile exists.
+ *   - The session has not exceeded OFFLINE_SESSION_MAX_AGE.
+ *   - The device was previously authenticated online (lastOnlineAuthentication is set).
+ *
+ * This function does NOT contact the backend — it only inspects local storage.
+ */
+function isOfflineSessionEligible(
+  storedTokens: StoredAuthTokens,
+  cachedUser: AuthUser | null,
+  lastOnlineAuthAt: number | null
+): boolean {
+  if (!storedTokens.refreshToken) return false;
+  if (!cachedUser) return false;
+  if (!lastOnlineAuthAt) return false;
+  const age = Date.now() - lastOnlineAuthAt;
+  if (age > OFFLINE_SESSION_MAX_AGE) return false;
+  return true;
+}
+
+/**
+ * Password flows
+ */
 // Device identification
 // ---------------------------------------------------------------------------
 
@@ -290,10 +327,12 @@ export async function signup(input: SignupRequest): Promise<AuthResponse> {
   });
 
   // ---------------------------------------------------------
-  // Cache user profile
+  // Cache user profile with offline-eligible timestamp
   // ---------------------------------------------------------
 
   await saveCachedUser(response.user);
+  const now = Date.now();
+  await saveLastOnlineAuthentication(now);
 
   return response;
 }
@@ -400,15 +439,18 @@ export async function restoreSession(options?: {
   const online = options?.online ?? true;
 
   const cached = await getCachedUser();
+  const storedTokens = await getAuthTokens();
+  const lastOnlineAuthAt = await getLastOnlineAuthentication();
 
   // ---------------------------------------------------------
   // Offline restoration
   // ---------------------------------------------------------
 
   if (!online) {
+    const eligible = isOfflineSessionEligible(storedTokens, cached, lastOnlineAuthAt);
     return {
-      user: cached,
-      restored: Boolean(cached),
+      user: eligible ? cached : null,
+      restored: eligible,
       offline: true,
     };
   }
@@ -420,7 +462,9 @@ export async function restoreSession(options?: {
   try {
     const { user } = await apiGetCurrentUser();
 
+    const now = Date.now();
     await saveCachedUser(user);
+    await saveLastOnlineAuthentication(now);
 
     return {
       user,
@@ -433,9 +477,10 @@ export async function restoreSession(options?: {
     // -------------------------------------------------------
 
     if (error instanceof AuthError && error.code === "NETWORK_ERROR") {
+      const eligible = isOfflineSessionEligible(storedTokens, cached, lastOnlineAuthAt);
       return {
-        user: cached,
-        restored: Boolean(cached),
+        user: eligible ? cached : null,
+        restored: eligible,
         offline: true,
       };
     }
@@ -462,9 +507,10 @@ export async function restoreSession(options?: {
     // -------------------------------------------------------
 
     if (cached) {
+      const eligible = isOfflineSessionEligible(storedTokens, cached, lastOnlineAuthAt);
       return {
-        user: cached,
-        restored: false,
+        user: eligible ? cached : null,
+        restored: eligible,
         offline: false,
       };
     }
@@ -532,6 +578,14 @@ export async function sendOTP(input: SendOTPRequest): Promise<OTPResponse> {
   return apiSendOTP(input);
 }
 
+/** Send/resend an email-verification OTP through the backend email service. */
+export async function sendEmailVerification(email: string): Promise<OTPResponse> {
+  if (!email.trim()) {
+    throw new AuthError("An email address is required.", "VALIDATION_ERROR");
+  }
+  return apiSendEmailVerification(email.trim());
+}
+
 export async function verifyOTP(input: VerifyOTPRequest): Promise<OTPResponse> {
   if (!input.otp.trim()) {
     throw new AuthError("Enter the verification code.", "VALIDATION_ERROR");
@@ -543,8 +597,8 @@ export async function verifyOTP(input: VerifyOTPRequest): Promise<OTPResponse> {
 export async function verifyEmail(
   input: VerifyEmailRequest,
 ): Promise<EmailVerificationResponse> {
-  if (!input.token.trim()) {
-    throw new AuthError("Verification token is missing.", "VALIDATION_ERROR");
+  if (!input.email.trim() || !input.code.trim()) {
+    throw new AuthError("Email and verification code are required.", "VALIDATION_ERROR");
   }
 
   return apiVerifyEmail(input);

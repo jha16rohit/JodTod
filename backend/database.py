@@ -12,6 +12,9 @@ Design:
 
 from __future__ import annotations
 
+import asyncio
+import logging
+import socket
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -25,6 +28,8 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from backend.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 def _normalize_database_url(url: str) -> str:
@@ -113,14 +118,58 @@ async def check_database_connection() -> None:
         await connection.execute(text("SELECT 1"))
 
 
-async def initialize_database() -> None:
+async def initialize_database(
+    max_retries: int = 5,
+    base_delay_seconds: float = 1.0,
+) -> None:
     """
     Perform non-destructive database initialization checks.
 
     Schema creation should normally be handled by Alembic migrations in
     staging/production rather than Base.metadata.create_all().
+
+    Retries transient startup failures (e.g. DNS ``getaddrinfo failed``
+    when the network/DNS is briefly unavailable) with exponential
+    backoff instead of failing the whole application on a single blip.
+    The last error is re-raised if all attempts fail.
     """
-    await check_database_connection()
+    last_error: BaseException | None = None
+    for attempt in range(1, max_retries + 1):
+        try:
+            await check_database_connection()
+            if attempt > 1:
+                logger.info(
+                    "Database connection established on attempt %d/%d.",
+                    attempt,
+                    max_retries,
+                )
+            return
+        except socket.gaierror as exc:
+            # Windows reports this as [Errno 11001] getaddrinfo failed:
+            # the DB hostname could not be resolved (no network, VPN,
+            # firewall, or transient DNS failure).
+            last_error = exc
+            logger.warning(
+                "Database hostname could not be resolved "
+                "(attempt %d/%d): %s. Check network/DNS access to "
+                "the database host.",
+                attempt,
+                max_retries,
+                exc,
+            )
+        except Exception as exc:  # noqa: BLE001 - retried then re-raised
+            last_error = exc
+            logger.warning(
+                "Database connection failed (attempt %d/%d): %s: %s",
+                attempt,
+                max_retries,
+                type(exc).__name__,
+                exc,
+            )
+        if attempt < max_retries:
+            await asyncio.sleep(base_delay_seconds * (2 ** (attempt - 1)))
+    assert last_error is not None  # for type checkers
+    raise last_error
 
 
 async def dispose_database() -> None:

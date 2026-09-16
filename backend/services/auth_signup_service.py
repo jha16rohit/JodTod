@@ -40,6 +40,9 @@ from backend.models.session import Session
 from backend.models.user import AccountStatus, User
 from backend.schemas.auth import AuthResponse, SignupRequest, TokenResponse
 from backend.schemas.user import AuthenticatedUser
+from backend.services.email_verification_service import (
+    send_signup_verification_best_effort,
+)
 
 
 # ++++++++++++++++ EXCEPTIONS ++++++++++++++++
@@ -344,7 +347,32 @@ async def create_account(
 
 
       # ----------------------------------------------------
-      # 4. Construct response
+      # The commit above emits an UPDATE for last_login_at, which
+      # expires the server-generated updated_at (onupdate) column.
+      # Reload the user while the session is still open so that
+      # response serialization below performs no lazy IO
+      # (sync attribute access in async context would raise
+      # MissingGreenlet).
+      # ----------------------------------------------------
+      await db.refresh(user)
+
+      # ----------------------------------------------------
+      # 4. Verification runs alongside the immediate session.
+      #
+      # Contract note: signup keeps its Phase-2 immediate-session
+      # behavior (AuthResponse is returned so the client can enter
+      # the app). Verification is dispatched best-effort here and
+      # can never fail the signup; newly verified PENDING accounts
+      # flip to ACTIVE in the verification services.
+      # ----------------------------------------------------
+      await send_signup_verification_best_effort(
+          db,
+          email=email,
+          phone=phone,
+      )
+
+      # ----------------------------------------------------
+      # 5. Construct response
       # ----------------------------------------------------
       access_token_expires_in = (
           settings.access_token_expire_seconds
