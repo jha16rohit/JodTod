@@ -37,6 +37,8 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
+        validate_by_name=True,
+        validate_by_alias=True,
         validate_default=True,
     )
 
@@ -193,10 +195,44 @@ class Settings(BaseSettings):
     # EMAIL PROVIDER
     # ============================================================
 
-    email_provider: str = "mock"
-    email_provider_api_key: SecretStr | None = None
-    email_from_address: str = "no-reply@jodtod.local"
-    email_from_name: str = "JodTod"
+    email_provider: str = Field(
+        default="mock",
+        validation_alias="EMAIL_PROVIDER",
+    )
+    email_provider_api_key: SecretStr | None = Field(
+        default=None,
+        validation_alias="EMAIL_PROVIDER_API_KEY",
+    )
+    email_from_address: str = Field(
+        default="no-reply@jodtod.local",
+        validation_alias="EMAIL_FROM_ADDRESS",
+    )
+    email_from_name: str = Field(
+        default="JodTod",
+        validation_alias="EMAIL_FROM_NAME",
+    )
+    smtp_host: str = Field(
+        default="smtp.gmail.com",
+        validation_alias="SMTP_HOST",
+    )
+    smtp_port: int = Field(
+        default=587,
+        ge=1,
+        le=65535,
+        validation_alias="SMTP_PORT",
+    )
+    smtp_username: str | None = Field(
+        default=None,
+        validation_alias="SMTP_USERNAME",
+    )
+    smtp_password: SecretStr | None = Field(
+        default=None,
+        validation_alias="SMTP_PASSWORD",
+    )
+    smtp_test_recipient: str | None = Field(
+        default=None,
+        validation_alias="SMTP_TEST_RECIPIENT",
+    )
 
     # ============================================================
     # REQUEST / NETWORK
@@ -361,7 +397,8 @@ def get_settings() -> Settings:
     Create one application-wide Settings instance.
     """
 
-    return Settings()
+    # Pydantic Settings resolves required fields from the configured env file.
+    return Settings()  # pyright: ignore[reportCallIssue]
 
 
 # ================================================================

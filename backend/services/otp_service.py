@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import secrets
 import time
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -107,6 +108,9 @@ class OTPDispatch:
     destination: str
     expires_at: datetime
     resend_available_at: datetime | None
+    provider: str
+    provider_accepted: bool
+    delivery_status: str
     # Populated ONLY when environment-gated dev disclosure applies
     # (non-production + mock provider). Never set in production.
     dev_code: str | None = None
@@ -129,6 +133,10 @@ def _normalize_destination(
         OTPPurpose.PHONE_LOGIN,
         OTPPurpose.PHONE_VERIFICATION,
     ):
+        if not re.fullmatch(r"\+[1-9]\d{7,14}", value):
+            raise OTPInvalidError(
+                "Enter a phone number in international format, for example +919876543210."
+            )
         return value, OTPDestinationType.PHONE
     if purpose in (
         OTPPurpose.EMAIL_SIGNUP,
@@ -247,6 +255,7 @@ async def request_otp(
         await db.flush()
 
         channel_mock = True
+        delivery = None
         try:
             if dest_type == OTPDestinationType.PHONE:
                 provider = get_sms_provider()
@@ -255,11 +264,11 @@ async def request_otp(
                     f"Your JodTod code is {code}. "
                     f"It expires in {settings.otp_expire_seconds // 60} minutes."
                 )
-                await provider.send_otp(normalized, message)
+                delivery = await provider.send_otp(normalized, message)
             else:
                 provider = get_email_provider()
                 channel_mock = provider.name == "mock"
-                await provider.send_otp_email(
+                delivery = await provider.send_otp_email(
                     normalized,
                     subject,
                     f"Your JodTod code is {code}. "
@@ -270,6 +279,15 @@ async def request_otp(
             # user can never receive.
             raise
 
+        assert delivery is not None
+        if (
+            dest_type == OTPDestinationType.EMAIL
+            and not delivery.accepted
+        ):
+            # A generated/stored email code is not a successful dispatch.
+            raise ProviderDeliveryError(
+                "The email provider did not accept the OTP."
+            )
         dev_code = code if _dev_disclosure_allowed(channel_mock) else None
 
         return OTPDispatch(
@@ -277,6 +295,9 @@ async def request_otp(
             destination=normalized,
             expires_at=expires_at,
             resend_available_at=resend_available_at,
+            provider=delivery.provider,
+            provider_accepted=delivery.accepted,
+            delivery_status=delivery.delivery_status,
             dev_code=dev_code,
         )
 

@@ -31,6 +31,7 @@ import type {
   AuthStatus,
   AuthUser,
   LoginRequest,
+  OAuthLoginRequest,
   SendOTPRequest,
   SignupRequest,
   VerifyEmailRequest,
@@ -51,6 +52,7 @@ export interface AuthContextValue {
   lastSyncAt: number | null;
   error: string | null;
   login: (input: LoginRequest) => Promise<void>;
+  loginWithGoogle: (input: OAuthLoginRequest) => Promise<void>;
   signup: (input: SignupRequest) => Promise<void>;
   logout: () => Promise<void>;
   refreshSession: () => Promise<void>;
@@ -213,6 +215,25 @@ useEffect(() => {
     []
   );
 
+  const loginWithGoogle = useCallback(async (input: OAuthLoginRequest) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await AuthService.loginWithGoogle(input);
+      if (!mountedRef.current) return;
+      setUser(response.user);
+      setSessionId(response.tokens.session_id ?? null);
+      setIsOffline(false);
+    } catch (e) {
+      if (!mountedRef.current) return;
+      const message = e instanceof Error ? e.message : "Google sign-in failed.";
+      setError(message);
+      throw e;
+    } finally {
+      if (mountedRef.current) setIsLoading(false);
+    }
+  }, []);
+
   const signup = useCallback(async (input: SignupRequest) => {
     setIsLoading(true);
     setError(null);
@@ -323,6 +344,7 @@ useEffect(() => {
       lastSyncAt: user ? new Date(user.updated_at).getTime() : null,
       error,
       login,
+      loginWithGoogle,
       signup,
       logout,
       refreshSession,
@@ -341,6 +363,7 @@ useEffect(() => {
     bootstrapped,
     error,
     login,
+    loginWithGoogle,
     signup,
     logout,
     refreshSession,

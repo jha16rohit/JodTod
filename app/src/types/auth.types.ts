@@ -132,6 +132,9 @@ export interface OTPResponse {
   message: string;
   expires_at?: string | null;
   retry_after_seconds?: number | null;
+  provider?: string | null;
+  provider_accepted?: boolean | null;
+  delivery_status?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -172,16 +175,8 @@ export interface ResetPasswordRequest {
 }
 
 // ---------------------------------------------------------------------------
-// OAuth — FOUNDATION ONLY.
-//
-// Backend contract status (verified 2026-09-15):
-// - backend/config.py has google_/apple_ settings
-// - backend/models/user.py has google_subject / apple_subject columns
-// - NO OAuth route, schema, or token-validation logic is implemented
-//   (backend/routes/auth.py is empty).
-//
-// The client must NEVER treat a client-side provider token/subject as
-// proof of authentication. Only a backend-validated session counts.
+// OAuth credentials are provider-issued ID tokens. The backend validates
+// them before issuing the normal JodTod session/token pair.
 // ---------------------------------------------------------------------------
 
 export type OAuthProvider = "google" | "apple";
@@ -190,6 +185,10 @@ export interface OAuthLoginRequest {
   provider: OAuthProvider;
   /** Raw provider credential — sent to the backend for validation. */
   id_token: string;
+  device_id?: string | null;
+  device_name?: string | null;
+  platform?: string | null;
+  app_version?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -232,6 +231,8 @@ export type AuthErrorCode =
   | "CONFLICT"
   | "RATE_LIMITED"
   | "SERVER_ERROR"
+  | "OAUTH_NOT_CONFIGURED"
+  | "INVALID_OAUTH_TOKEN"
   | "OAUTH_NOT_IMPLEMENTED"
   | "PASSWORD_RESET_NOT_IMPLEMENTED"
   | "OTP_FAILED"

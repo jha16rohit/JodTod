@@ -34,11 +34,19 @@ async def send_email_verification(
     """
     dispatch = await send_verification_email(db, payload.email)
 
+    message = (
+        "Verification-code dispatch was accepted by the email provider."
+        if dispatch.provider_accepted
+        else "Verification code generated, but no real email delivery provider is configured."
+    )
     return OTPResponse(
-        message="Verification code sent.",
+        message=message,
         expires_at=dispatch.expires_at,
         retry_after_seconds=None,
         verified=False,
+        provider=dispatch.provider,
+        provider_accepted=dispatch.provider_accepted,
+        delivery_status=dispatch.delivery_status,
         dev_code=dispatch.dev_code,
     )
 

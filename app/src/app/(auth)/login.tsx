@@ -16,9 +16,10 @@ import {
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import Constants from 'expo-constants';
+import * as Google from 'expo-auth-session/providers/google';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
-import { Alert } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 
 const OTP_LENGTH = 6;
@@ -299,7 +300,14 @@ function HeaderVisual({ height }: { height: number }) {
 
 export default function Login() {
   const router = useRouter();
-  const { login, sendOTP, verifyOTP, isLoading: authLoading } = useAuth();
+  const { login, loginWithGoogle, sendOTP, verifyOTP, isLoading: authLoading } = useAuth();
+  const googleClientId = Constants.expoConfig?.extra?.googleWebClientId as string | undefined;
+  const [, , promptGoogleAsync] = Google.useAuthRequest({
+    androidClientId: googleClientId,
+    iosClientId: googleClientId,
+    webClientId: googleClientId,
+    scopes: ['openid', 'email', 'profile'],
+  });
 
   const [step, setStep] = useState<Step>('form');
 
@@ -485,11 +493,41 @@ export default function Login() {
     }
   };
 
-  const handleSocial = (provider: 'Google' | 'Apple') => {
-    Alert.alert(
-      `${provider} sign-in`,
-      `${provider} sign-in is not available yet: the backend has no OAuth endpoint implemented, so no account was created or signed in.`
-    );
+  const handleSocial = async (provider: 'Google' | 'Apple') => {
+    if (provider === 'Apple') {
+      setFormError('Apple sign-in is not configured yet.');
+      return;
+    }
+
+    if (!googleClientId) {
+      setFormError('Google sign-in is not configured.');
+      return;
+    }
+
+    setBusy(true);
+    setFormError(null);
+    try {
+      const result = await promptGoogleAsync();
+      if (result.type !== 'success') {
+        if (result.type !== 'cancel' && result.type !== 'dismiss') {
+          setFormError('Google sign-in was not completed.');
+        }
+        return;
+      }
+
+      const idToken = (result as { params?: { id_token?: string }; authentication?: { idToken?: string } }).params?.id_token
+        ?? (result as { authentication?: { idToken?: string } }).authentication?.idToken;
+      if (!idToken) {
+        setFormError('Google did not return an identity credential.');
+        return;
+      }
+
+      await loginWithGoogle({ provider: 'google', id_token: idToken });
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : 'Google sign-in failed.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -806,7 +844,7 @@ export default function Login() {
                     <View className="flex-1 h-px" style={{ backgroundColor: INPUT_BORDER }} />
                   </View>
 
-                  {/* Social buttons — foundation only; backend OAuth is unimplemented */}
+                  {/* Social buttons */}
                   <View className="flex-row gap-3 mb-6">
                     <SocialButton
                       renderIcon={() => <GoogleGlyph size={18} />}

@@ -73,7 +73,7 @@ async def send_verification_email(
         destination=normalized,
         purpose=OTPPurpose.EMAIL_VERIFICATION,
         user_id=user_id,
-        subject="Verify your JodTod email",
+        subject="JodTod Email Verification Code",
     )
 
 

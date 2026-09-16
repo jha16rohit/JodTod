@@ -153,7 +153,7 @@ def verify_google_id_token(
         raise OAuthNotConfiguredError(
             "Google sign-in is not configured."
         )
-    return _decode_with_jwks(
+    claims = _decode_with_jwks(
         id_token,
         provider="google",
         jwks_url=GOOGLE_CERTS_URL,
@@ -161,6 +161,11 @@ def verify_google_id_token(
         audience=client_id,
         key_fetcher=key_fetcher,
     )
+    if not claims.get("email") or not _email_verified(claims):
+        raise InvalidOAuthTokenError(
+            "Google account email is not verified."
+        )
+    return claims
 
 
 def verify_apple_identity_token(

@@ -35,6 +35,7 @@ import { Platform } from "react-native";
 import {
   apiGetCurrentUser,
   apiLogin,
+  apiLoginWithGoogle,
   apiLogout,
   apiRefresh,
   apiSendOTP,
@@ -376,6 +377,36 @@ export async function login(input: LoginRequest): Promise<AuthResponse> {
   return response;
 }
 
+export async function loginWithGoogle(
+  input: OAuthLoginRequest,
+): Promise<AuthResponse> {
+  if (input.provider !== "google" || !input.id_token.trim()) {
+    throw new AuthError(
+      "Google authentication was not completed.",
+      "VALIDATION_ERROR",
+    );
+  }
+
+  const deviceId = await requireDeviceId(input.device_id);
+  const response = await apiLoginWithGoogle({
+    id_token: input.id_token,
+    device_id: deviceId,
+    device_name: resolveDeviceName(input.device_name),
+    platform: resolvePlatform(input.platform),
+    app_version: resolveAppVersion(input.app_version),
+  });
+
+  await saveAuthTokens({
+    accessToken: response.tokens.access_token,
+    refreshToken: response.tokens.refresh_token,
+    sessionId: response.tokens.session_id ?? null,
+  });
+  await saveCachedUser(response.user);
+  await saveLastOnlineAuthentication(Date.now());
+
+  return response;
+}
+
 // ---------------------------------------------------------------------------
 // Session lifecycle
 // ---------------------------------------------------------------------------
@@ -632,12 +663,6 @@ export async function resetPassword(
   _input: ResetPasswordRequest,
 ): Promise<never> {
   throw MISSING_CONTRACT("Password reset");
-}
-
-export async function loginWithGoogle(
-  _input: OAuthLoginRequest,
-): Promise<never> {
-  throw MISSING_CONTRACT("Google sign-in");
 }
 
 export async function loginWithApple(

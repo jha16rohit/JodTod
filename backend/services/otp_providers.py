@@ -18,9 +18,12 @@ from __future__ import annotations
 
 import json
 import logging
+import smtplib
 import urllib.request
+from urllib.error import HTTPError, URLError
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from email.message import EmailMessage
 
 from backend.config import settings
 
@@ -33,8 +36,11 @@ logger = logging.getLogger(__name__)
 class DeliveryResult:
     """Outcome of a provider delivery attempt."""
 
-    delivered: bool
+    # "accepted" means the provider accepted our request. It is not evidence
+    # that an SMS/email reached the recipient's device or inbox.
+    accepted: bool
     provider: str
+    delivery_status: str
     external_id: str | None = None
 
 
@@ -77,8 +83,9 @@ class MockSMSProvider(SMSProvider):
             "Development SMS delivery recorded (no vendor contacted)."
         )
         return DeliveryResult(
-            delivered=True,
+            accepted=False,
             provider=self.name,
+            delivery_status="unavailable",
         )
 
 
@@ -114,8 +121,81 @@ class MockEmailProvider(EmailProvider):
             "Development email delivery recorded (no vendor contacted)."
         )
         return DeliveryResult(
-            delivered=True,
+            accepted=False,
             provider=self.name,
+            delivery_status="unavailable",
+        )
+
+
+class SMTPEmailProvider(EmailProvider):
+    """SMTP email adapter using Python's standard library."""
+
+    name = "smtp"
+
+    async def send_otp_email(
+        self,
+        email: str,
+        subject: str,
+        text_body: str,
+    ) -> DeliveryResult:
+        username = (settings.smtp_username or "").strip()
+        password = (
+            settings.smtp_password.get_secret_value()
+            if settings.smtp_password
+            else ""
+        )
+        if not username or not password:
+            raise ProviderConfigurationError(
+                "EMAIL_PROVIDER=smtp requires SMTP_USERNAME and SMTP_PASSWORD."
+            )
+
+        message = EmailMessage()
+        message["From"] = (
+            f"{settings.email_from_name} <{settings.email_from_address}>"
+        )
+        message["To"] = email
+        message["Subject"] = subject
+        message.set_content(text_body)
+
+        try:
+            with smtplib.SMTP(
+                settings.smtp_host,
+                settings.smtp_port,
+                timeout=15,
+            ) as server:
+                server.starttls()
+                server.login(username, password)
+                server.send_message(message)
+        except smtplib.SMTPAuthenticationError as exc:
+            logger.error(
+                "Email delivery failed: provider=smtp smtp_host=%s sender=%s recipient=%s status=failed error_type=authentication",
+                settings.smtp_host,
+                settings.email_from_address,
+                email,
+            )
+            raise ProviderDeliveryError(
+                "SMTP authentication failed. Check the SMTP username and App Password."
+            ) from exc
+        except (smtplib.SMTPException, OSError) as exc:
+            logger.error(
+                "Email delivery failed: provider=smtp smtp_host=%s sender=%s recipient=%s status=failed error_type=%s",
+                settings.smtp_host,
+                settings.email_from_address,
+                email,
+                type(exc).__name__,
+            )
+            raise ProviderDeliveryError("SMTP email delivery failed.") from exc
+
+        logger.info(
+            "Email delivery accepted: provider=smtp smtp_host=%s sender=%s recipient=%s status=accepted",
+            settings.smtp_host,
+            settings.email_from_address,
+            email,
+        )
+        return DeliveryResult(
+            accepted=True,
+            provider=self.name,
+            delivery_status="accepted",
         )
 
 
@@ -174,10 +254,39 @@ class ResendEmailProvider(EmailProvider):
 
         try:
             with urllib.request.urlopen(request, timeout=15) as response:
+                status_code = response.status
                 body = response.read().decode("utf-8") if response else ""
-        except Exception as exc:
+        except HTTPError as exc:
+            error_body = exc.read().decode("utf-8", errors="replace")
+            logger.error(
+                "Resend rejected email: status=%s response=%s recipient=%s from=%s",
+                exc.code,
+                error_body[:1000],
+                email,
+                settings.email_from_address,
+            )
             raise ProviderDeliveryError(
-                f"Resend delivery failed: {type(exc).__name__}"
+                "Resend rejected the email request."
+            ) from exc
+        except (URLError, TimeoutError) as exc:
+            logger.error(
+                "Resend request failed: error=%s recipient=%s from=%s",
+                type(exc).__name__,
+                email,
+                settings.email_from_address,
+            )
+            raise ProviderDeliveryError(
+                "Resend could not be reached."
+            ) from exc
+        except Exception as exc:
+            logger.error(
+                "Resend request failed: error=%s recipient=%s from=%s",
+                type(exc).__name__,
+                email,
+                settings.email_from_address,
+            )
+            raise ProviderDeliveryError(
+                "Resend delivery failed."
             ) from exc
 
         external_id: str | None = None
@@ -190,9 +299,18 @@ class ResendEmailProvider(EmailProvider):
         except ValueError:
             external_id = None
 
+        logger.info(
+            "Resend accepted email: status=%s message_id=%s recipient=%s from=%s",
+            status_code,
+            external_id,
+            email,
+            settings.email_from_address,
+        )
+
         return DeliveryResult(
-            delivered=True,
+            accepted=True,
             provider=self.name,
+            delivery_status="accepted",
             external_id=external_id,
         )
 
@@ -225,10 +343,12 @@ def get_sms_provider() -> SMSProvider:
 def get_email_provider() -> EmailProvider:
     """Resolve the configured email provider."""
     name = (settings.email_provider or "mock").strip().lower()
+    if name == "smtp":
+        return SMTPEmailProvider()
     if name == "resend":
         return ResendEmailProvider()
     if name != "mock":
-        logger.warning(
-            "Unknown EMAIL_PROVIDER=%r; using mock email adapter.", name
+        raise ProviderConfigurationError(
+            f"Unsupported EMAIL_PROVIDER={name!r}. Configure smtp or mock."
         )
     return MockEmailProvider()

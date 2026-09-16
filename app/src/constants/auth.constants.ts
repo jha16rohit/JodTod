@@ -66,6 +66,7 @@ export const API_V1_BASE_URL = `${API_URL}${API_PREFIX}`;
 export const AUTH_API_PATHS = {
   SIGNUP: "/auth/signup",
   LOGIN: "/auth/login",
+  GOOGLE: "/auth/google",
   REFRESH: "/auth/refresh",
   LOGOUT: "/auth/logout",
 
@@ -84,8 +85,7 @@ export const AUTH_API_PATHS = {
 /**
  * Proposed authentication endpoints.
  *
- * These must NOT be called until the corresponding backend routes
- * are actually implemented.
+ * These remain reserved for provider flows not implemented yet.
  */
 export const AUTH_PROPOSED_PATHS = {
   FORGOT_PASSWORD: "/auth/forgot-password",

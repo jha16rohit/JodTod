@@ -47,11 +47,19 @@ async def send_otp(
             purpose=payload.purpose,
         )
 
+    message = (
+        "Code dispatch was accepted by the provider."
+        if dispatch.provider_accepted
+        else "Code generated, but no real SMS/email delivery provider is configured."
+    )
     return OTPResponse(
-        message="Code sent.",
+        message=message,
         expires_at=dispatch.expires_at,
         retry_after_seconds=None,
         verified=False,
+        provider=dispatch.provider,
+        provider_accepted=dispatch.provider_accepted,
+        delivery_status=dispatch.delivery_status,
         dev_code=dispatch.dev_code,
     )
 

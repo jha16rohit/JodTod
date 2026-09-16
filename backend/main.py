@@ -41,6 +41,10 @@ from backend.services.auth_logout_service import (
     SessionNotFoundError as LogoutSessionNotFoundError,
 )
 from backend.services.otp_service import OTPError
+from backend.services.otp_providers import (
+    ProviderConfigurationError,
+    ProviderDeliveryError,
+)
 from backend.services.auth_refresh_service import RefreshError
 from backend.services.auth_oauth_service import OAuthError
 
@@ -256,6 +260,34 @@ async def otp_error_handler(
     return JSONResponse(
         status_code=status_code,
         content={"detail": exc.message, "code": exc.code},
+    )
+
+
+@app.exception_handler(ProviderConfigurationError)
+async def provider_configuration_error_handler(
+    request: Request,
+    exc: ProviderConfigurationError,
+):
+    return JSONResponse(
+        status_code=503,
+        content={
+            "detail": "Email delivery is not configured.",
+            "code": "EMAIL_PROVIDER_NOT_CONFIGURED",
+        },
+    )
+
+
+@app.exception_handler(ProviderDeliveryError)
+async def provider_delivery_error_handler(
+    request: Request,
+    exc: ProviderDeliveryError,
+):
+    return JSONResponse(
+        status_code=502,
+        content={
+            "detail": "Email delivery was rejected by the provider.",
+            "code": "EMAIL_PROVIDER_REJECTED",
+        },
     )
 
 

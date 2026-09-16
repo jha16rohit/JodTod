@@ -24,6 +24,7 @@
  * Current authentication routes:
  *   POST /api/auth/signup
  *   POST /api/auth/login
+ *   POST /api/auth/google
  *   POST /api/auth/refresh
  *   POST /api/auth/logout
  *   POST /api/auth/send-otp
@@ -58,6 +59,7 @@ import {
   type EmailVerificationResponse,
   type LoginRequest,
   type LogoutRequest,
+  type OAuthLoginRequest,
   type OTPResponse,
   type RefreshTokenRequest,
   type SendOTPRequest,
@@ -492,6 +494,21 @@ export async function apiSignup(input: SignupApiInput): Promise<AuthResponse> {
 
 export async function apiLogin(input: LoginRequest): Promise<AuthResponse> {
   const payload = await authRequest<AuthResponse>(AUTH_API_PATHS.LOGIN, {
+    method: "POST",
+    body: input,
+  });
+
+  return normalizeAuthResponse(payload);
+}
+
+// ---------------------------------------------------------------------------
+// Google OAuth
+// ---------------------------------------------------------------------------
+
+export async function apiLoginWithGoogle(
+  input: Omit<OAuthLoginRequest, "provider">,
+): Promise<AuthResponse> {
+  const payload = await authRequest<AuthResponse>(AUTH_API_PATHS.GOOGLE, {
     method: "POST",
     body: input,
   });

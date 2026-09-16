@@ -220,6 +220,12 @@ class OTPResponse(BaseModel):
 
     verified: bool = False
 
+    # Dispatch metadata is deliberately limited to safe, operational status.
+    # Provider acceptance is not proof of final delivery.
+    provider: Optional[str] = None
+    provider_accepted: Optional[bool] = None
+    delivery_status: Optional[str] = None
+
     dev_code: Optional[str] = Field(
         default=None,
         description=(
