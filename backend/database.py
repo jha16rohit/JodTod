@@ -100,15 +100,32 @@ async def transaction(
     """
     Explicit transaction boundary for multi-step operations.
 
-    Any exception causes rollback. Successful completion commits.
+    The first transaction() call on a given session owns the transaction:
+    it begins, commits on success, and rolls back on any exception.
+
+    Nested calls on the same session participate in the already-open
+    transaction instead of calling begin() again (which would raise
+    "A transaction is already begun on this Session"); the outermost
+    owner performs the final commit/rollback so the whole operation
+    stays atomic.
+
+    Note: the session's first SQL statement autobegins a transaction, so
+    a write must happen inside the outermost transaction() rather than
+    before it, otherwise it would join a transaction nobody commits.
     """
+    owns_transaction = not session.in_transaction()
     try:
-        async with session.begin():
+        if owns_transaction:
+            async with session.begin():
+                yield session
+        else:
             yield session
     except Exception:
-        # session.begin() normally handles this itself; explicit rollback
-        # keeps the contract clear if the implementation is changed later.
-        await session.rollback()
+        if owns_transaction:
+            # session.begin() normally handles this itself; explicit
+            # rollback keeps the contract clear if the implementation
+            # is changed later.
+            await session.rollback()
         raise
 
 

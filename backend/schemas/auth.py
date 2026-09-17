@@ -115,6 +115,27 @@ class LoginRequest(BaseModel):
     )
 
 
+# LOGIN STEP / PENDING OTP
+class LoginStatusResponse(BaseModel):
+    """
+    Intermediate login response returned when the backend accepts the
+    password but requires an EMAIL_LOGIN OTP before opening a session.
+
+    The mobile client uses this to route the user to the login-OTP step.
+    No tokens are present here because no session exists yet.
+    """
+
+    status: str = "otp_required"
+
+    message: str
+
+    destination: str
+
+    purpose: str = "email_login"
+
+    expires_in: Optional[int] = None
+
+
 # REFRESH TOKEN
 class RefreshTokenRequest(BaseModel):
     """

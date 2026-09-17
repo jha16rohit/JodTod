@@ -33,11 +33,13 @@ import Constants from "expo-constants";
 import { Platform } from "react-native";
 
 import {
+  apiForgotPassword,
   apiGetCurrentUser,
   apiLogin,
   apiLoginWithGoogle,
   apiLogout,
   apiRefresh,
+  apiResetPassword,
   apiSendOTP,
   apiSendEmailVerification,
   apiSignup,
@@ -64,6 +66,8 @@ import type {
   EmailVerificationResponse,
   ForgotPasswordRequest,
   LoginRequest,
+  LoginResult,
+  MessageResponse,
   OAuthLoginRequest,
   OTPResponse,
   ResetPasswordRequest,
@@ -319,30 +323,40 @@ export async function signup(input: SignupRequest): Promise<AuthResponse> {
   // Persist authentication state
   // ---------------------------------------------------------
 
-  await saveAuthTokens({
-    accessToken: response.tokens.access_token,
-
-    refreshToken: response.tokens.refresh_token,
-
-    sessionId: response.tokens.session_id ?? null,
-  });
-
-  // ---------------------------------------------------------
-  // Cache user profile with offline-eligible timestamp
-  // ---------------------------------------------------------
-
-  await saveCachedUser(response.user);
-  const now = Date.now();
-  await saveLastOnlineAuthentication(now);
+  await persistAuthenticated(response);
 
   return response;
 }
 
 // ---------------------------------------------------------------------------
-// Login
+// Login (two-step password login)
 // ---------------------------------------------------------------------------
 
-export async function login(input: LoginRequest): Promise<AuthResponse> {
+function isAuthResponse(value: unknown): value is AuthResponse {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "user" in value &&
+    "tokens" in value
+  );
+}
+
+/**
+ * Step 1 of the two-step password login.
+ *
+ * Flow:
+ *
+ * 1. Validate identifier + password.
+ * 2. Resolve the device ID.
+ * 3. POST /auth/login — the backend validates the credentials and
+ *    dispatches a login OTP. No session is created here.
+ * 4a. If the backend returns a full AuthResponse (credential/existing
+ *     session edge case): persist tokens + cached user.
+ * 4b. Otherwise it returns the pending "otp_required" step. Nothing is
+ *     persisted — the caller must route to the login-OTP screen, where
+ *     verify-otp (purpose email_login / phone_login) opens the session.
+ */
+export async function login(input: LoginRequest): Promise<LoginResult> {
   const identifier = input.identifier.trim();
 
   if (!identifier) {
@@ -364,17 +378,32 @@ export async function login(input: LoginRequest): Promise<AuthResponse> {
     device_id: deviceId,
   });
 
+  if (isAuthResponse(response)) {
+    await persistAuthenticated(response);
+    return response;
+  }
+
+  return {
+    status: "otp_required",
+    message: response.message,
+    destination: response.destination,
+    purpose: response.purpose === "phone_login" ? "phone_login" : "email_login",
+    deviceId,
+  };
+}
+
+/**
+ * Persist a fully authenticated AuthResponse (tokens + cached user +
+ * last-online timestamp).
+ */
+async function persistAuthenticated(response: AuthResponse): Promise<void> {
   await saveAuthTokens({
     accessToken: response.tokens.access_token,
-
     refreshToken: response.tokens.refresh_token,
-
     sessionId: response.tokens.session_id ?? null,
   });
-
   await saveCachedUser(response.user);
-
-  return response;
+  await saveLastOnlineAuthentication(Date.now());
 }
 
 export async function loginWithGoogle(
@@ -396,13 +425,7 @@ export async function loginWithGoogle(
     app_version: resolveAppVersion(input.app_version),
   });
 
-  await saveAuthTokens({
-    accessToken: response.tokens.access_token,
-    refreshToken: response.tokens.refresh_token,
-    sessionId: response.tokens.session_id ?? null,
-  });
-  await saveCachedUser(response.user);
-  await saveLastOnlineAuthentication(Date.now());
+  await persistAuthenticated(response);
 
   return response;
 }
@@ -617,12 +640,23 @@ export async function sendEmailVerification(email: string): Promise<OTPResponse>
   return apiSendEmailVerification(email.trim());
 }
 
-export async function verifyOTP(input: VerifyOTPRequest): Promise<OTPResponse> {
+export async function verifyOTP(
+  input: VerifyOTPRequest,
+): Promise<AuthResponse | OTPResponse> {
   if (!input.otp.trim()) {
     throw new AuthError("Enter the verification code.", "VALIDATION_ERROR");
   }
 
-  return apiVerifyOTP(input);
+  const result = await apiVerifyOTP(input);
+
+  // Login purposes (email_login / phone_login) complete the two-step login:
+  // the backend opens a session and returns fresh tokens, which MUST be
+  // persisted before the caller reads the current user.
+  if (isAuthResponse(result)) {
+    await persistAuthenticated(result);
+  }
+
+  return result;
 }
 
 export async function verifyEmail(
@@ -633,6 +667,66 @@ export async function verifyEmail(
   }
 
   return apiVerifyEmail(input);
+}
+
+// ---------------------------------------------------------------------------
+// Password reset
+// ---------------------------------------------------------------------------
+
+/**
+ * Request a password-reset OTP for an existing account.
+ *
+ * The backend dispatches the code to the identifier (email via SMTP or
+ * phone via SMS) and returns a generic success message so callers cannot
+ * distinguish existing accounts from unknown identifiers.
+ */
+export async function requestPasswordReset(
+  input: ForgotPasswordRequest,
+): Promise<MessageResponse> {
+  const identifier = input.identifier.trim();
+
+  if (!identifier) {
+    throw new AuthError(
+      "Enter your email address or phone number.",
+      "VALIDATION_ERROR",
+    );
+  }
+
+  return apiForgotPassword(identifier);
+}
+
+/**
+ * Complete the password reset with the code received at the forgot step.
+ */
+export async function resetPassword(
+  input: ResetPasswordRequest,
+): Promise<MessageResponse> {
+  const identifier = input.identifier.trim();
+  const code = input.code.trim();
+
+  if (!identifier) {
+    throw new AuthError(
+      "Enter your email address or phone number.",
+      "VALIDATION_ERROR",
+    );
+  }
+
+  if (!code) {
+    throw new AuthError("Enter the reset code.", "VALIDATION_ERROR");
+  }
+
+  if (!input.new_password || input.new_password.length < 8) {
+    throw new AuthError(
+      "New password must be at least 8 characters.",
+      "VALIDATION_ERROR",
+    );
+  }
+
+  return apiResetPassword({
+    identifier,
+    code,
+    new_password: input.new_password,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -648,22 +742,8 @@ export async function verifyEmail(
 const MISSING_CONTRACT = (feature: string): AuthError =>
   new AuthError(
     `${feature} is not available yet: the backend has no implemented endpoint for it. No request was sent and no session was created.`,
-    feature.startsWith("Google") || feature.startsWith("Apple")
-      ? "OAUTH_NOT_IMPLEMENTED"
-      : "PASSWORD_RESET_NOT_IMPLEMENTED",
+    "OAUTH_NOT_IMPLEMENTED",
   );
-
-export async function requestPasswordReset(
-  _input: ForgotPasswordRequest,
-): Promise<never> {
-  throw MISSING_CONTRACT("Password reset");
-}
-
-export async function resetPassword(
-  _input: ResetPasswordRequest,
-): Promise<never> {
-  throw MISSING_CONTRACT("Password reset");
-}
 
 export async function loginWithApple(
   _input: OAuthLoginRequest,

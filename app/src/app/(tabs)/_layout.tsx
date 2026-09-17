@@ -135,11 +135,7 @@ export default function TabsLayout() {
     return <AuthLoadingScreen message="Loading your account…" />;
   }
 
-  if (isVerificationPending) {
-    return <Redirect href="/verify-email" />;
-  }
-
-  if (!isAuthenticated) {
+  if (!isAuthenticated && !isVerificationPending) {
     return <Redirect href="/login" />;
   }
 

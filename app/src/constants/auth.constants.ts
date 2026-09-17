@@ -6,15 +6,13 @@
  *
  * Backend contract:
  * - FastAPI application base: API_URL
- * - Authentication prefix: /api/auth
- * - User prefix: /api/users
- * - Health endpoint: /api/health
+ * - Authentication prefix: /auth (routes registered in backend/routes/)
+ * - User prefix: /users
+ * - Health endpoint: /health
  *
- * Current implemented backend endpoint:
- * - POST /api/auth/signup
- *
- * Additional authentication endpoints should only be used once their
- * corresponding backend routes are implemented.
+ * Endpoints are used only once their corresponding backend routes are
+ * implemented. Implemented: signup, login, refresh, logout, send-otp,
+ * verify-otp, verify-email, forgot-password, reset-password, users/me.
  */
 
 import { API_URL } from "../config/api";
@@ -75,6 +73,9 @@ export const AUTH_API_PATHS = {
   VERIFY_OTP: "/auth/verify-otp",
   VERIFY_EMAIL: "/auth/verify-email",
 
+  FORGOT_PASSWORD: "/auth/forgot-password",
+  RESET_PASSWORD: "/auth/reset-password",
+
   CURRENT_USER: "/users/me",
 } as const;
 
@@ -88,8 +89,6 @@ export const AUTH_API_PATHS = {
  * These remain reserved for provider flows not implemented yet.
  */
 export const AUTH_PROPOSED_PATHS = {
-  FORGOT_PASSWORD: "/auth/forgot-password",
-  RESET_PASSWORD: "/auth/reset-password",
   GOOGLE: "/auth/google",
   APPLE: "/auth/apple",
 } as const;
@@ -153,6 +152,7 @@ export const AUTH_ROUTES = {
   LOGIN: "/login",
   SIGNUP: "/signup",
   FORGOT_PASSWORD: "/forgot-password",
+  LOGIN_OTP: "/login-otp",
   VERIFY_EMAIL: "/verify-email",
 } as const;
 

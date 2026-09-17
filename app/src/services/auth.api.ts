@@ -58,10 +58,13 @@ import {
   type CurrentUserResponse,
   type EmailVerificationResponse,
   type LoginRequest,
+  type LoginStatusResponse,
   type LogoutRequest,
+  type MessageResponse,
   type OAuthLoginRequest,
   type OTPResponse,
   type RefreshTokenRequest,
+  type ResetPasswordRequest,
   type SendOTPRequest,
   type SignupRequest,
   type TokenResponse,
@@ -489,16 +492,37 @@ export async function apiSignup(input: SignupApiInput): Promise<AuthResponse> {
 }
 
 // ---------------------------------------------------------------------------
-// Login
+// Login (two-step: credentials -> pending OTP -> verify-otp opens session)
 // ---------------------------------------------------------------------------
 
-export async function apiLogin(input: LoginRequest): Promise<AuthResponse> {
-  const payload = await authRequest<AuthResponse>(AUTH_API_PATHS.LOGIN, {
-    method: "POST",
-    body: input,
-  });
+function isAuthResponse(payload: unknown): payload is AuthResponse {
+  return (
+    typeof payload === "object" &&
+    payload !== null &&
+    "user" in payload &&
+    "tokens" in payload
+  );
+}
 
-  return normalizeAuthResponse(payload);
+export async function apiLogin(
+  input: LoginRequest,
+): Promise<AuthResponse | LoginStatusResponse> {
+  const payload = await authRequest<AuthResponse | LoginStatusResponse>(
+    AUTH_API_PATHS.LOGIN,
+    {
+      method: "POST",
+      body: input,
+    },
+  );
+
+  if (isAuthResponse(payload) || payload?.status === "otp_required") {
+    return payload;
+  }
+
+  throw new AuthError(
+    "Unexpected authentication response from server.",
+    "SERVER_ERROR",
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -582,11 +606,18 @@ export async function apiSendEmailVerification(email: string): Promise<OTPRespon
 
 export async function apiVerifyOTP(
   input: VerifyOTPRequest,
-): Promise<OTPResponse> {
-  return authRequest<OTPResponse>(AUTH_API_PATHS.VERIFY_OTP, {
-    method: "POST",
-    body: input,
-  });
+): Promise<AuthResponse | OTPResponse> {
+  const payload = await authRequest<AuthResponse | OTPResponse>(
+    AUTH_API_PATHS.VERIFY_OTP,
+    {
+      method: "POST",
+      body: input,
+    },
+  );
+
+  // Login purposes (email_login / phone_login) return a full AuthResponse
+  // with fresh tokens; all other purposes return an OTPResponse.
+  return isAuthResponse(payload) ? payload : (payload as OTPResponse);
 }
 
 // ---------------------------------------------------------------------------
@@ -597,6 +628,28 @@ export async function apiVerifyEmail(
   input: VerifyEmailRequest,
 ): Promise<EmailVerificationResponse> {
   return authRequest<EmailVerificationResponse>(AUTH_API_PATHS.VERIFY_EMAIL, {
+    method: "POST",
+    body: input,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Password reset
+// ---------------------------------------------------------------------------
+
+export async function apiForgotPassword(
+  identifier: string,
+): Promise<MessageResponse> {
+  return authRequest<MessageResponse>(AUTH_API_PATHS.FORGOT_PASSWORD, {
+    method: "POST",
+    body: { identifier },
+  });
+}
+
+export async function apiResetPassword(
+  input: ResetPasswordRequest,
+): Promise<MessageResponse> {
+  return authRequest<MessageResponse>(AUTH_API_PATHS.RESET_PASSWORD, {
     method: "POST",
     body: input,
   });

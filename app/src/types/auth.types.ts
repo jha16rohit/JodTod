@@ -96,6 +96,32 @@ export interface AuthResponse {
   tokens: TokenResponse;
 }
 
+/**
+ * Intermediate step-1 response from POST /auth/login.
+ *
+ * The backend accepts the password but requires a login OTP before any
+ * session is created. No tokens are present in this response.
+ */
+export interface LoginStatusResponse {
+  status: "otp_required";
+  message: string;
+  destination: string;
+  purpose: "email_login" | "phone_login";
+  expires_in?: number | null;
+}
+
+/**
+ * Client-side pending-OTP step of the two-step password login.
+ * Extends the backend response with the resolved device id so the
+ * verify-otp step can re-attach the exact same device session identity.
+ */
+export interface LoginPendingOtp extends LoginStatusResponse {
+  deviceId: string;
+}
+
+/** Result of the two-step password login: full session or pending OTP step. */
+export type LoginResult = AuthResponse | LoginPendingOtp;
+
 export interface CurrentUserResponse {
   user: AuthUser;
 }
@@ -126,6 +152,11 @@ export interface VerifyOTPRequest {
   destination: string;
   otp: string;
   purpose: OTPPurpose;
+  /** Device identity required by login purposes (email_login / phone_login). */
+  device_id?: string | null;
+  device_name?: string | null;
+  platform?: string | null;
+  app_version?: string | null;
 }
 
 export interface OTPResponse {
@@ -152,25 +183,24 @@ export interface EmailVerificationResponse {
 }
 
 // ---------------------------------------------------------------------------
-// Password reset — FOUNDATION ONLY.
+// Password reset (mirror backend/schemas/auth.py + routes/auth_password.py)
 //
-// Backend contract status (verified 2026-09-15):
-// - models/password_reset.py exists (token_hash, expiry, single-use)
-// - NO route is implemented in backend/routes/auth.py (file is empty)
-// - NO request schema exists in backend/schemas/auth.py
-// - NO public path is listed in backend/middleware/auth.py
+// Implemented backend contract:
+// - POST /auth/forgot-password  { identifier } -> MessageResponse
+// - POST /auth/reset-password   { identifier, code, new_password } -> MessageResponse
 //
-// These types reserve the client-side shape so UI/service layers do not
-// scatter ad-hoc shapes. They must NOT be treated as proof that the
-// backend endpoint exists.
+// `identifier` accepts an email address or an international phone number.
+// The reset code is the OTP dispatched to the identifier by the forgot
+// step and completed at the reset step.
 // ---------------------------------------------------------------------------
 
 export interface ForgotPasswordRequest {
-  email: string;
+  identifier: string;
 }
 
 export interface ResetPasswordRequest {
-  token: string;
+  identifier: string;
+  code: string;
   new_password: string;
 }
 
@@ -234,7 +264,6 @@ export type AuthErrorCode =
   | "OAUTH_NOT_CONFIGURED"
   | "INVALID_OAUTH_TOKEN"
   | "OAUTH_NOT_IMPLEMENTED"
-  | "PASSWORD_RESET_NOT_IMPLEMENTED"
   | "OTP_FAILED"
   | "UNKNOWN";
 

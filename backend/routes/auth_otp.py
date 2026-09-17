@@ -16,6 +16,7 @@ from backend.services.phone_auth_service import (
     verify_login_otp,
     verify_phone_number,
 )
+from backend.services.email_login_otp import verify_email_login_otp
 
 router = APIRouter(
     prefix="/auth",
@@ -76,19 +77,30 @@ async def verify_otp(
     Verify a one-time code.
 
     Purpose PHONE_LOGIN opens a full authenticated session and
-    returns AuthResponse; every other purpose returns OTPResponse.
+    returns AuthResponse; purpose EMAIL_LOGIN also returns AuthResponse
+    after verifying the code and creating a session. Every other purpose
+    returns OTPResponse.
     """
     if payload.purpose == OTPPurpose.PHONE_LOGIN:
         device_id = (payload.device_id or "").strip()
         if not device_id:
-            # Reuse the phone service's generic failure so device
-            # problems are indistinguishable from bad codes.
             raise PhoneAccountBlockedError("Invalid credentials.")
         return await verify_login_otp(
             db,
             payload.destination,
             payload.otp,
             device_id=device_id,
+            device_name=payload.device_name,
+            platform=payload.platform,
+            app_version=payload.app_version,
+        )
+
+    if payload.purpose == OTPPurpose.EMAIL_LOGIN:
+        return await verify_email_login_otp(
+            db,
+            payload.destination,
+            payload.otp,
+            device_id=payload.device_id,
             device_name=payload.device_name,
             platform=payload.platform,
             app_version=payload.app_version,

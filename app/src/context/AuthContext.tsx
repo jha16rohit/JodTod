@@ -28,9 +28,11 @@ import {
   subscribeToNetworkChanges,
 } from "../services/network.service";
 import type {
+  AuthResponse,
   AuthStatus,
   AuthUser,
   LoginRequest,
+  LoginResult,
   OAuthLoginRequest,
   SendOTPRequest,
   SignupRequest,
@@ -45,13 +47,14 @@ export interface AuthContextValue {
   isVerificationPending: boolean;
   verificationMethod: "email" | "phone" | null;
   isLoading: boolean;
+  isAuthBusy: boolean;
   isOffline: boolean;
   authStatus: AuthStatus;
   offlineEligible: boolean;
   lastOnlineAuthentication: number | null;
   lastSyncAt: number | null;
   error: string | null;
-  login: (input: LoginRequest) => Promise<void>;
+  login: (input: LoginRequest) => Promise<LoginResult>;
   loginWithGoogle: (input: OAuthLoginRequest) => Promise<void>;
   signup: (input: SignupRequest) => Promise<void>;
   logout: () => Promise<void>;
@@ -86,10 +89,20 @@ function statusFor(params: {
   return "offline";
 }
 
+function isAuthedResponse(value: LoginResult): value is AuthResponse {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "user" in value &&
+    "tokens" in value
+  );
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isAuthBusy, setIsAuthBusy] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [bootstrapped, setBootstrapped] = useState(false);
@@ -195,28 +208,36 @@ useEffect(() => {
 
   const login = useCallback(
     async (input: LoginRequest) => {
-      setIsLoading(true);
+      // Pending-OTP flow: do NOT flip global isLoading. The (auth) layout
+      // keys its loading screen off isLoading (bootstrap only), so flipping
+      // it here would unmount the login screen mid-flow and destroy local
+      // form state/errors. Screens track their own busy state while a
+      // request is in flight.
+      setIsAuthBusy(true);
       setError(null);
       try {
-        const response = await AuthService.login(input);
-        if (!mountedRef.current) return;
-        setUser(response.user);
-        setSessionId(response.tokens.session_id ?? null);
-        setIsOffline(false);
+        const result = await AuthService.login(input);
+        if (!mountedRef.current) return result;
+        if (isAuthedResponse(result)) {
+          setUser(result.user);
+          setSessionId(result.tokens.session_id ?? null);
+          setIsOffline(false);
+        }
+        return result;
       } catch (e) {
-        if (!mountedRef.current) return;
+        if (!mountedRef.current) throw e;
         const message = e instanceof Error ? e.message : "Login failed.";
         setError(message);
         throw e;
       } finally {
-        if (mountedRef.current) setIsLoading(false);
+        if (mountedRef.current) setIsAuthBusy(false);
       }
     },
     []
   );
 
   const loginWithGoogle = useCallback(async (input: OAuthLoginRequest) => {
-    setIsLoading(true);
+    setIsAuthBusy(true);
     setError(null);
     try {
       const response = await AuthService.loginWithGoogle(input);
@@ -230,12 +251,12 @@ useEffect(() => {
       setError(message);
       throw e;
     } finally {
-      if (mountedRef.current) setIsLoading(false);
+      if (mountedRef.current) setIsAuthBusy(false);
     }
   }, []);
 
   const signup = useCallback(async (input: SignupRequest) => {
-    setIsLoading(true);
+    setIsAuthBusy(true);
     setError(null);
     try {
       const response = await AuthService.signup(input);
@@ -249,12 +270,12 @@ useEffect(() => {
       setError(message);
       throw e;
     } finally {
-      if (mountedRef.current) setIsLoading(false);
+      if (mountedRef.current) setIsAuthBusy(false);
     }
   }, []);
 
   const logout = useCallback(async () => {
-    setIsLoading(true);
+    setIsAuthBusy(true);
     try {
       await AuthService.logout(sessionId);
     } catch (e) {
@@ -267,7 +288,7 @@ useEffect(() => {
         setUser(null);
         setSessionId(null);
         setError(null);
-        setIsLoading(false);
+        setIsAuthBusy(false);
       }
     }
   }, [sessionId]);
@@ -297,8 +318,23 @@ useEffect(() => {
 
   const verifyOTP = useCallback(async (input: VerifyOTPRequest) => {
     const result = await AuthService.verifyOTP(input);
-    // OTP acceptance is not trusted locally: re-read the authoritative user
-    // record before opening protected routes.
+    if (!mountedRef.current) return result;
+
+    // Login purposes (email_login / phone_login) return a full AuthResponse:
+    // AuthService already persisted the fresh tokens, so adopt the session
+    // immediately. Verification purposes return an OTPResponse and require a
+    // fresh read of the authoritative user record.
+    const authed = isAuthedResponse(result as LoginResult)
+      ? (result as AuthResponse)
+      : null;
+
+    if (authed) {
+      setUser(authed.user);
+      setSessionId(authed.tokens.session_id ?? null);
+      setIsOffline(false);
+      return result;
+    }
+
     const fresh = await AuthService.getCurrentUser();
     if (mountedRef.current) setUser(fresh);
     return result;
@@ -335,6 +371,7 @@ useEffect(() => {
       isVerificationPending,
       verificationMethod,
       isLoading,
+      isAuthBusy,
       isOffline,
       authStatus: statusFor({ bootstrapped, hasUser, offline: isOffline, online: !isOffline, error, offlineEligible }),
       offlineEligible,
@@ -359,6 +396,7 @@ useEffect(() => {
     user,
     sessionId,
     isLoading,
+    isAuthBusy,
     isOffline,
     bootstrapped,
     error,

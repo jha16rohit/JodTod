@@ -9,6 +9,7 @@ from backend.models.otp import OTPPurpose
 from backend.schemas.auth import (
     AuthResponse,
     LoginRequest,
+    LoginStatusResponse,
     RefreshTokenRequest,
     SendOTPRequest,
     SignupRequest,
@@ -24,8 +25,8 @@ def test_signup_requires_identifier():
 
 
 def test_signup_accepts_email_or_phone():
-    email_only = SignupRequest(email="a@b.com")
-    phone_only = SignupRequest(phone="+15551234567")
+    email_only = SignupRequest(email="a@b.com", device_id="dev-1")
+    phone_only = SignupRequest(phone="+15551234567", device_id="dev-1")
     assert email_only.email == "a@b.com"
     assert phone_only.phone == "+15551234567"
 
@@ -43,6 +44,26 @@ def test_login_request_validation():
         LoginRequest(identifier="a", password="Password123")
     with pytest.raises(ValidationError):
         LoginRequest(identifier="user@example.com", password="short")
+
+
+def test_login_status_response_shape():
+    pending = LoginStatusResponse(
+        status="otp_required",
+        message="A verification code was sent to your email.",
+        destination="user@example.com",
+        purpose="email_login",
+    )
+    assert pending.status == "otp_required"
+    assert pending.purpose == "email_login"
+    assert pending.destination == "user@example.com"
+    # The two-step login response must never carry session tokens.
+    assert pending.model_dump() == {
+        "status": "otp_required",
+        "message": "A verification code was sent to your email.",
+        "destination": "user@example.com",
+        "purpose": "email_login",
+        "expires_in": None,
+    }
 
 
 def test_refresh_token_request_validation():

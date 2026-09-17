@@ -310,7 +310,7 @@ function HeaderVisual({ height }: { height: number }) {
 
 export default function Signup() {
   const router = useRouter();
-  const { signup, loginWithGoogle, logout, isLoading: authLoading } = useAuth();
+  const { signup, loginWithGoogle, isLoading: authLoading } = useAuth();
   const googleClientId = Constants.expoConfig?.extra?.googleWebClientId as string | undefined;
   const [, , promptGoogleAsync] = Google.useAuthRequest({
     androidClientId: googleClientId,
@@ -364,11 +364,12 @@ export default function Signup() {
         phone: phone.trim() || undefined,
         password,
       });
-      // AuthContext is now authenticated → (auth) layout redirects to /(tabs).
-      // The backend has issued the selected channel's OTP. Revoke this
-      // bootstrap session so verification happens only after a real login.
-      await logout();
-      router.replace('/login' as any);
+      // Signup creates an immediate backend session and dispatches the
+      // channel OTP. The account is PENDING until verification, so route
+      // to /verify-email (the (auth) layout also redirects there while
+      // verification is pending). Keep this session so verification can
+      // complete without logging in again.
+      router.replace('/verify-email' as any);
     } catch (e) {
       setFormError(e instanceof Error ? e.message : 'Signup failed. Please try again.');
     } finally {
