@@ -72,9 +72,15 @@ function GlassCard({
         style,
       ]}
     >
+      {/*
+        Plain BlurView on Android silently ignores `intensity` unless you
+        pass experimentalBlurMethod — without it Android renders a flat
+        solid tint instead of an actual blur, making the card look white.
+      */}
       <BlurView
         intensity={14}
         tint="light"
+        experimentalBlurMethod="dimezisBlurView"
         style={{ borderRadius: radius }}
       >
         {/* soft sky/green tint instead of flat white so bubbles read through in color */}
@@ -311,11 +317,20 @@ function HeaderVisual({ height }: { height: number }) {
 export default function Signup() {
   const router = useRouter();
   const { signup, loginWithGoogle, isLoading: authLoading } = useAuth();
-  const googleClientId = Constants.expoConfig?.extra?.googleWebClientId as string | undefined;
+  const manifestExtra = (
+    Constants as unknown as {
+      manifest2?: { extra?: { expoClient?: { extra?: unknown } } };
+    }
+  ).manifest2?.extra?.expoClient?.extra;
+  const googleClientId = (
+    Constants.expoConfig?.extra?.googleWebClientId ??
+    (manifestExtra as { googleWebClientId?: string } | undefined)?.googleWebClientId
+  ) as string | undefined;
+  const googleHookClientId = googleClientId ?? 'google-client-id-not-configured';
   const [, , promptGoogleAsync] = Google.useAuthRequest({
-    androidClientId: googleClientId,
-    iosClientId: googleClientId,
-    webClientId: googleClientId,
+    androidClientId: googleHookClientId,
+    iosClientId: googleHookClientId,
+    webClientId: googleHookClientId,
     scopes: ['openid', 'email', 'profile'],
   });
 

@@ -26,7 +26,7 @@ export default function Index() {
   useEffect(() => {
     if (isLoading || !splashDone) return;
     if (isVerificationPending) {
-      router.replace("/verify-email");
+      router.replace("/verify-email" as any);
     } else if (isAuthenticated) {
       router.replace("/(tabs)");
     } else {

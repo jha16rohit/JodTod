@@ -18,7 +18,9 @@
       "expo-image",
       "expo-router",
       "expo-asset",
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-splash-screen",
+      "expo-web-browser"
     ],
     "extra": {
       "router": {},
