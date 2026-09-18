@@ -6,7 +6,10 @@ import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import * as NavigationBar from "expo-navigation-bar";
 
-SplashScreen.preventAutoHideAsync();
+import { AuthProvider } from "../context/AuthContext";
+import OfflineIndicator from "../components/auth/OfflineIndicator";
+
+void SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const [appIsReady, setAppIsReady] = useState(false);
@@ -14,11 +17,11 @@ export default function RootLayout() {
   useEffect(() => {
     if (Platform.OS === "android") {
       try {
-        NavigationBar.setStyle("dark");
-      } catch (e) {
+        void NavigationBar.setStyle("dark");
+      } catch (error) {
         console.warn(
           "Android navigation bar configuration warning:",
-          e
+          error
         );
       }
     }
@@ -27,20 +30,21 @@ export default function RootLayout() {
   useEffect(() => {
     async function prepare() {
       try {
-        // Load fonts/assets here if needed
-      } catch (e) {
-        console.warn("App preparation warning:", e);
+        // Preload fonts/assets here if needed.
+        // Authentication bootstrap is handled by AuthProvider.
+      } catch (error) {
+        console.warn("App preparation warning:", error);
       } finally {
         setAppIsReady(true);
       }
     }
 
-    prepare();
+    void prepare();
   }, []);
 
   useEffect(() => {
     if (appIsReady) {
-      SplashScreen.hideAsync();
+      void SplashScreen.hideAsync();
     }
   }, [appIsReady]);
 
@@ -49,9 +53,14 @@ export default function RootLayout() {
   }
 
   return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="index" />
-      <Stack.Screen name="onboarding" />
-    </Stack>
+    <AuthProvider>
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="index" />
+        <Stack.Screen name="onboarding" />
+        <Stack.Screen name="(auth)" />
+        <Stack.Screen name="(tabs)" />
+      </Stack>
+      <OfflineIndicator />
+    </AuthProvider>
   );
 }

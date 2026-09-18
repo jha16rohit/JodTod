@@ -11,19 +11,22 @@ import {
   Easing,
   KeyboardAvoidingView,
   Platform,
-  Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import Constants from 'expo-constants';
+import * as Google from 'expo-auth-session/providers/google';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
+import { useAuth } from '../../context/AuthContext';
 
 const OTP_LENGTH = 6;
 const RESEND_SECONDS = 30;
-const { width: SCREEN_W } = Dimensions.get('window');
 
 type Step = 'form' | 'otp' | 'verifying' | 'verified';
+type LoginMethod = 'email' | 'phone';
 
 // ---------------------------------------------------------------------------
 // Palette — clean white card, single vivid green accent, no heavy tinted glass
@@ -76,9 +79,10 @@ function GlassCard({
     >
       {/*
         Plain BlurView on Android silently ignores `intensity` unless you
-        pass experimentalBlurMethod — without it Android renders a flat
-        solid tint instead of an actual blur, which is why the card kept
-        looking white no matter how low intensity was dropped.
+        pass experimentalBlurMethod. On newer expo-blur versions the blur
+        may also need a target view wrapped around the content behind it
+        (see the expo-blur docs for your SDK version); if Android still
+        renders a flat tint, that is the first thing to check.
       */}
       <BlurView
         intensity={14}
@@ -100,7 +104,7 @@ function GlassCard({
 }
 
 // ---------------------------------------------------------------------------
-// Simple pill input — light grey fill, hairline border, icon + text
+// Simple pill input — light fill, hairline border, icon + text
 // ---------------------------------------------------------------------------
 
 function GlassInput({
@@ -133,7 +137,7 @@ function GlassInput({
 // ---------------------------------------------------------------------------
 
 const CTA_HEIGHT = 54;
-const CTA_RADIUS = CTA_HEIGHT / 2; // full capsule pill, matches reference "Log In" / "Create Account" buttons
+const CTA_RADIUS = CTA_HEIGHT / 2; // full capsule pill
 
 function GradientCTA({
   children,
@@ -193,6 +197,85 @@ function GradientCTA({
 }
 
 // ---------------------------------------------------------------------------
+// Email / Phone segmented toggle (replaces two near-identical inline blocks)
+// ---------------------------------------------------------------------------
+
+const TOGGLE_OPTIONS: Array<{ value: LoginMethod; label: string }> = [
+  { value: 'email', label: 'Email' },
+  { value: 'phone', label: 'Phone' },
+];
+
+function SegmentedToggle({
+  value,
+  onChange,
+}: {
+  value: LoginMethod;
+  onChange: (next: LoginMethod) => void;
+}) {
+  return (
+    <View
+      style={{
+        marginBottom: 20,
+        padding: 4,
+        borderRadius: 16,
+        backgroundColor: INPUT_BG,
+        borderWidth: 1,
+        borderColor: INPUT_BORDER,
+      }}
+    >
+      <View className="flex-row">
+        {TOGGLE_OPTIONS.map((option) => {
+          const active = value === option.value;
+          return (
+            <View
+              key={option.value}
+              className="flex-1"
+              style={{
+                shadowColor: active ? BRAND_GREEN : 'transparent',
+                shadowOpacity: active ? 0.4 : 0,
+                shadowRadius: 8,
+                shadowOffset: { width: 0, height: 4 },
+                elevation: active ? 4 : 0,
+                borderRadius: 12,
+              }}
+            >
+              <TouchableOpacity
+                className="h-10 items-center justify-center"
+                style={{ borderRadius: 12, overflow: 'hidden' }}
+                onPress={() => onChange(option.value)}
+              >
+                {active ? (
+                  <LinearGradient
+                    colors={[BRAND_GREEN_LIGHT, BRAND_GREEN_DARK]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      borderRadius: 12,
+                    }}
+                  />
+                ) : null}
+
+                <Text
+                  className="text-sm font-semibold"
+                  style={{ color: active ? '#FFFFFF' : TEXT_MUTED }}
+                >
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Real multicolor Google "G" mark — Ionicons' logo-google is flat single-color,
 // which is why it didn't match the reference. This is the actual 4-color G.
 // ---------------------------------------------------------------------------
@@ -219,7 +302,10 @@ function GoogleGlyph({ size = 18 }: { size?: number }) {
     </Svg>
   );
 }
-// reference screenshot: no border, opaque white, icon + label, even shadow)
+
+// ---------------------------------------------------------------------------
+// Social button — opaque white pill, no border, icon + label, even shadow
+// (matches the reference screenshot)
 // ---------------------------------------------------------------------------
 
 const SOCIAL_HEIGHT = 50;
@@ -264,11 +350,12 @@ function SocialButton({
 // ---------------------------------------------------------------------------
 
 function BubbleBackdrop({ children }: { children: ReactNode }) {
+  const { width } = useWindowDimensions();
   return (
     <ImageBackground
-      source={require('../../assets/images/jodtod/background_onboarding.png')}
+      source={require('../../../assets/images/jodtod/background_onboarding.png')}
       resizeMode="cover"
-      style={{ flex: 1, width: SCREEN_W }}
+      style={{ flex: 1, width }}
     >
       {children}
     </ImageBackground>
@@ -276,20 +363,20 @@ function BubbleBackdrop({ children }: { children: ReactNode }) {
 }
 
 // ---------------------------------------------------------------------------
-// Header photo — shown at full strength, no white wash over it. Only the
-// title/subtitle get a small text-shadow so they stay legible on the photo.
+// Header photo — shown at full strength, no white wash over it
 // ---------------------------------------------------------------------------
 
 function HeaderVisual({ height }: { height: number }) {
+  const { width } = useWindowDimensions();
   return (
-    <View style={{ width: SCREEN_W, height, overflow: 'hidden' }}>
+    <View style={{ width, height, overflow: 'hidden' }}>
       <Image
-        source={require('../../assets/images/jodtod/plan-trips-login.png')}
+        source={require('../../../assets/images/jodtod/plan-trips-login.png')}
         style={{
           position: 'absolute',
           top: 0,
           left: 0,
-          width: SCREEN_W,
+          width,
           height: '100%',
         }}
         resizeMode="cover"
@@ -304,15 +391,59 @@ function HeaderVisual({ height }: { height: number }) {
 
 export default function Login() {
   const router = useRouter();
+  const { width: screenW } = useWindowDimensions();
+  const { login, loginWithGoogle, sendOTP, verifyOTP, isLoading: authLoading } = useAuth();
+
+  // Google needs a separate OAuth client ID per platform. The web client ID is
+  // kept as a fallback, but native builds should define their own IDs in
+  // app config `extra` (googleAndroidClientId / googleIosClientId).
+  const manifestExtra = (
+    Constants as unknown as {
+      manifest2?: { extra?: { expoClient?: { extra?: unknown } } };
+    }
+  ).manifest2?.extra?.expoClient?.extra;
+  const extra = (Constants.expoConfig?.extra ?? manifestExtra) as
+    | {
+        googleWebClientId?: string;
+        googleAndroidClientId?: string;
+        googleIosClientId?: string;
+      }
+    | undefined;
+  const googleWebClientId = extra?.googleWebClientId;
+  const googleAndroidClientId = extra?.googleAndroidClientId ?? googleWebClientId;
+  const googleIosClientId = extra?.googleIosClientId ?? googleWebClientId;
+  const googleConfigured = Boolean(
+    Platform.OS === 'android'
+      ? googleAndroidClientId
+      : Platform.OS === 'ios'
+        ? googleIosClientId
+        : googleWebClientId
+  );
+  const googleHookWebClientId = googleWebClientId ?? 'google-client-id-not-configured';
+
+  // useIdTokenAuthRequest uses the ID-token flow, so the response actually
+  // carries `params.id_token` (the default useAuthRequest does not).
+  const [googleRequest, , promptGoogleAsync] = Google.useIdTokenAuthRequest({
+    webClientId: googleHookWebClientId,
+    androidClientId: googleAndroidClientId ?? googleHookWebClientId,
+    iosClientId: googleIosClientId ?? googleHookWebClientId,
+    scopes: ['openid', 'email', 'profile'],
+  });
 
   const [step, setStep] = useState<Step>('form');
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  // TODO: `rememberMe` is not forwarded to login() yet. Wire it into
+  // AuthContext (e.g. choose persistent vs. session token storage) once the
+  // login() signature supports it.
   const [rememberMe, setRememberMe] = useState(true);
-  const [loginMethod, setLoginMethod] = useState<'email' | 'phone'>('email');
+  const [loginMethod, setLoginMethod] = useState<LoginMethod>('email');
   const [phone, setPhone] = useState('');
+  const [formError, setFormError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [otpMessage, setOtpMessage] = useState<string | null>(null);
 
   const [digits, setDigits] = useState<string[]>(Array(OTP_LENGTH).fill(''));
   const [secondsLeft, setSecondsLeft] = useState(RESEND_SECONDS);
@@ -324,80 +455,154 @@ export default function Login() {
 
   const spin = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0)).current;
+  const verifyLoop = useRef<Animated.CompositeAnimation | null>(null);
 
+  // Single interval for the whole OTP step; resend just resets secondsLeft.
   useEffect(() => {
     if (step !== 'otp') return;
-    if (secondsLeft <= 0) return;
 
     const interval = setInterval(() => {
       setSecondsLeft((s) => (s > 0 ? s - 1 : 0));
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [step, secondsLeft]);
+  }, [step]);
 
+  // Focus the first OTP box whenever the OTP step opens.
   useEffect(() => {
-    if (step !== 'verifying') return;
+    if (step !== 'otp') return;
+    const t = setTimeout(() => inputRefs.current[0]?.focus(), 150);
+    return () => clearTimeout(t);
+  }, [step]);
 
-    const loop = Animated.loop(
-      Animated.timing(spin, {
-        toValue: 1,
-        duration: 900,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    );
-
-    loop.start();
-
-    const verifyTimer = setTimeout(() => {
-      loop.stop();
+  // Spinner runs only while the real verify-OTP network request is in flight.
+  useEffect(() => {
+    if (step === 'verifying') {
+      const loop = Animated.loop(
+        Animated.timing(spin, {
+          toValue: 1,
+          duration: 900,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        })
+      );
+      verifyLoop.current = loop;
+      loop.start();
+      return () => {
+        loop.stop();
+      };
+    }
+    if (step === 'verified') {
+      verifyLoop.current?.stop();
       scale.setValue(0);
-      setStep('verified');
-
       Animated.spring(scale, {
         toValue: 1,
         friction: 4,
         tension: 80,
         useNativeDriver: true,
       }).start();
-    }, 1800);
-
-    return () => {
-      clearTimeout(verifyTimer);
-      loop.stop();
-    };
+    }
   }, [step, scale, spin]);
 
-  useEffect(() => {
-    if (step !== 'verified') return;
-
-    const redirectTimer = setTimeout(() => {
-      router.replace('/(tabs)' as any);
-    }, 1400);
-
-    return () => clearTimeout(redirectTimer);
-  }, [step, router]);
+  // NOTE: there is intentionally no navigation to /(tabs) after OTP
+  // verification. OTP verification alone does not create a backend session
+  // (the backend has no phone-login session endpoint yet), so navigating
+  // would fake auth. The (auth) layout redirects only when AuthContext is
+  // authenticated, so once verifyOTP starts establishing a session through
+  // AuthContext, the redirect will happen automatically.
 
   const rotateInterpolate = spin.interpolate({
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg'],
   });
 
-  const switchMethod = (method: 'email' | 'phone') => {
+  const switchMethod = (method: LoginMethod) => {
     setLoginMethod(method);
+    setFormError(null);
+    setOtpMessage(null);
   };
 
-  const handleSendOtp = () => {
-    setDigits(Array(OTP_LENGTH).fill(''));
-    setSecondsLeft(RESEND_SECONDS);
-    setStep('otp');
+  const handleEmailLogin = async () => {
+    setFormError(null);
+    if (!email.trim()) {
+      setFormError('Enter your email address.');
+      return;
+    }
+    if (!password) {
+      setFormError('Enter your password.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await login({ identifier: email.trim(), password });
+      // Two-step password login: the backend accepted the credentials and
+      // dispatched a login OTP without opening a session. Route to the
+      // login-OTP screen, which completes login via verify-otp.
+      if (result && 'status' in result && result.status === 'otp_required') {
+        router.push({
+          pathname: '/login-otp',
+          params: {
+            destination: result.destination,
+            purpose: result.purpose,
+            message: result.message,
+            deviceId: result.deviceId,
+          },
+        } as never);
+        return;
+      }
+      // Fully authenticated session returned (edge case) → (auth) layout
+      // also redirects automatically when AuthContext becomes authenticated.
+      router.replace('/(tabs)' as any);
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : 'Login failed. Please try again.');
+    } finally {
+      setBusy(false);
+    }
   };
 
+  const handleSendOtp = async () => {
+    setFormError(null);
+    setOtpMessage(null);
+    const destination = phone.trim();
+    if (!destination) {
+      setFormError('Enter your phone number to receive a code.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = (await sendOTP({ destination, purpose: 'phone_login' })) as {
+        message?: string;
+      };
+      setDigits(Array(OTP_LENGTH).fill(''));
+      setSecondsLeft(RESEND_SECONDS);
+      setOtpMessage(result?.message ?? 'Code sent. Check your phone.');
+      setStep('otp');
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : 'Could not send the code.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Handles typing, replacing a digit, and pasting / SMS autofill of a full code.
   const handleChangeDigit = (text: string, index: number) => {
-    const value = text.replace(/[^0-9]/g, '').slice(-1);
+    const cleaned = text.replace(/[^0-9]/g, '');
     const next = [...digits];
 
+    // Paste or autofill: spread the digits across the boxes from this index.
+    if (cleaned.length > 2) {
+      const chars = cleaned.slice(0, OTP_LENGTH - index).split('');
+      chars.forEach((c, i) => {
+        next[index + i] = c;
+      });
+      setDigits(next);
+      const focusIndex = Math.min(index + chars.length, OTP_LENGTH - 1);
+      inputRefs.current[focusIndex]?.focus();
+      return;
+    }
+
+    // Normal typing: keep only the newest digit (handles typing over a filled box).
+    const value = cleaned.slice(-1);
     next[index] = value;
     setDigits(next);
 
@@ -416,15 +621,85 @@ export default function Login() {
     }
   };
 
-  const handleResend = () => {
-    setDigits(Array(OTP_LENGTH).fill(''));
-    setSecondsLeft(RESEND_SECONDS);
-    inputRefs.current[0]?.focus();
+  const handleResend = async () => {
+    const destination = phone.trim();
+    if (!destination) return;
+    setFormError(null);
+    try {
+      await sendOTP({ destination, purpose: 'phone_login' });
+      setDigits(Array(OTP_LENGTH).fill(''));
+      setSecondsLeft(RESEND_SECONDS);
+      setOtpMessage('A new code was sent.');
+      inputRefs.current[0]?.focus();
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : 'Could not resend the code.');
+    }
   };
 
-  const handleVerify = () => {
-    if (!isOtpComplete) return;
+  const handleVerify = async () => {
+    if (!isOtpComplete || busy) return;
+    setBusy(true);
+    setFormError(null);
     setStep('verifying');
+    try {
+      const result = (await verifyOTP({
+        destination: phone.trim(),
+        otp,
+        purpose: 'phone_login',
+      })) as { message?: string };
+      setOtpMessage(result?.message ?? 'Number verified.');
+      // No navigation here: see the note above. The (auth) layout redirects
+      // once AuthContext reports an authenticated session.
+      setStep('verified');
+    } catch (e) {
+      setStep('otp');
+      setFormError(e instanceof Error ? e.message : 'Invalid code. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSocial = async (provider: 'Google' | 'Apple') => {
+    if (provider === 'Apple') {
+      setFormError('Apple sign-in is not configured yet.');
+      return;
+    }
+
+    if (!googleConfigured) {
+      setFormError('Google sign-in is not configured.');
+      return;
+    }
+
+    if (!googleRequest) {
+      setFormError('Google sign-in is still loading. Try again in a moment.');
+      return;
+    }
+
+    setBusy(true);
+    setFormError(null);
+    try {
+      const result = await promptGoogleAsync();
+      if (result.type !== 'success') {
+        if (result.type !== 'cancel' && result.type !== 'dismiss') {
+          setFormError('Google sign-in was not completed.');
+        }
+        return;
+      }
+
+      const idToken =
+        (result as { params?: { id_token?: string } }).params?.id_token ??
+        (result as { authentication?: { idToken?: string } }).authentication?.idToken;
+      if (!idToken) {
+        setFormError('Google did not return an identity credential.');
+        return;
+      }
+
+      await loginWithGoogle({ provider: 'google', id_token: idToken });
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : 'Google sign-in failed.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -433,10 +708,11 @@ export default function Login() {
         <BubbleBackdrop>
           <ScrollView
             showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
             contentContainerStyle={{ paddingBottom: 40, flexGrow: 1 }}
           >
             {/* Header — full bleed photo, shown at full strength */}
-            <View style={{ position: 'relative', width: SCREEN_W }}>
+            <View style={{ position: 'relative', width: screenW }}>
               <HeaderVisual height={340} />
 
               {/* Text overlay — absolute, sits on top of full-bleed image */}
@@ -475,7 +751,7 @@ export default function Login() {
               </View>
             </View>
 
-            {/* Clean white login card, floated up slightly over the photo */}
+            {/* Login card, floated up slightly over the photo */}
             <View style={{ marginTop: -28, marginHorizontal: 18 }}>
               <GlassCard radius={28}>
                 <View className="px-6 pt-7 pb-8">
@@ -486,105 +762,8 @@ export default function Login() {
                     Login to your account
                   </Text>
 
-                  {/* Email / Phone toggle — light pill segmented control */}
-                  <View
-                    style={{
-                      marginBottom: 20,
-                      padding: 4,
-                      borderRadius: 16,
-                      backgroundColor: INPUT_BG,
-                      borderWidth: 1,
-                      borderColor: INPUT_BORDER,
-                    }}
-                  >
-                    <View className="flex-row">
-                      <View
-                        className="flex-1"
-                        style={{
-                          shadowColor: loginMethod === 'email' ? BRAND_GREEN : 'transparent',
-                          shadowOpacity: loginMethod === 'email' ? 0.4 : 0,
-                          shadowRadius: 8,
-                          shadowOffset: { width: 0, height: 4 },
-                          elevation: loginMethod === 'email' ? 4 : 0,
-                          borderRadius: 12,
-                        }}
-                      >
-                      <TouchableOpacity
-                        className="h-10 items-center justify-center"
-                        style={{ borderRadius: 12, overflow: 'hidden' }}
-                        onPress={() => switchMethod('email')}
-                      >
-                        {loginMethod === 'email' ? (
-                          <LinearGradient
-                            colors={[BRAND_GREEN_LIGHT, BRAND_GREEN_DARK]}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 0 }}
-                            style={{
-                              position: 'absolute',
-                              top: 0,
-                              left: 0,
-                              right: 0,
-                              bottom: 0,
-                              borderRadius: 12,
-                            }}
-                          />
-                        ) : null}
-
-                        <Text
-                          className="text-sm font-semibold"
-                          style={{
-                            color: loginMethod === 'email' ? '#FFFFFF' : TEXT_MUTED,
-                          }}
-                        >
-                          Email
-                        </Text>
-                      </TouchableOpacity>
-                      </View>
-
-                      <View
-                        className="flex-1"
-                        style={{
-                          shadowColor: loginMethod === 'phone' ? BRAND_GREEN : 'transparent',
-                          shadowOpacity: loginMethod === 'phone' ? 0.4 : 0,
-                          shadowRadius: 8,
-                          shadowOffset: { width: 0, height: 4 },
-                          elevation: loginMethod === 'phone' ? 4 : 0,
-                          borderRadius: 12,
-                        }}
-                      >
-                      <TouchableOpacity
-                        className="h-10 items-center justify-center"
-                        style={{ borderRadius: 12, overflow: 'hidden' }}
-                        onPress={() => switchMethod('phone')}
-                      >
-                        {loginMethod === 'phone' ? (
-                          <LinearGradient
-                            colors={[BRAND_GREEN_LIGHT, BRAND_GREEN_DARK]}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 0 }}
-                            style={{
-                              position: 'absolute',
-                              top: 0,
-                              left: 0,
-                              right: 0,
-                              bottom: 0,
-                              borderRadius: 12,
-                            }}
-                          />
-                        ) : null}
-
-                        <Text
-                          className="text-sm font-semibold"
-                          style={{
-                            color: loginMethod === 'phone' ? '#FFFFFF' : TEXT_MUTED,
-                          }}
-                        >
-                          Phone
-                        </Text>
-                      </TouchableOpacity>
-                      </View>
-                    </View>
-                  </View>
+                  {/* Email / Phone toggle */}
+                  <SegmentedToggle value={loginMethod} onChange={switchMethod} />
 
                   {loginMethod === 'email' ? (
                     <>
@@ -609,6 +788,9 @@ export default function Login() {
                             onChangeText={setEmail}
                             keyboardType="email-address"
                             autoCapitalize="none"
+                            autoCorrect={false}
+                            autoComplete="email"
+                            textContentType="emailAddress"
                           />
                         </View>
                       </GlassInput>
@@ -633,6 +815,10 @@ export default function Login() {
                             value={password}
                             onChangeText={setPassword}
                             secureTextEntry={!showPassword}
+                            autoCapitalize="none"
+                            autoCorrect={false}
+                            autoComplete="password"
+                            textContentType="password"
                           />
                           <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
                             <Ionicons
@@ -669,16 +855,24 @@ export default function Login() {
                           </Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity>
+                        <TouchableOpacity onPress={() => router.push('/forgot-password' as any)}>
                           <Text className="text-[13px] font-semibold" style={{ color: BRAND_GREEN_DARK }}>
                             Forgot password?
                           </Text>
                         </TouchableOpacity>
                       </View>
 
+                      {formError && loginMethod === 'email' ? (
+                        <Text className="text-[13px] mb-4 text-center font-semibold" style={{ color: '#D64545' }}>
+                          {formError}
+                        </Text>
+                      ) : null}
+
                       <View style={{ marginBottom: 24 }}>
-                        <GradientCTA onPress={() => router.push('/(tabs)' as any)}>
-                          <Text className="text-white text-base font-bold">Login</Text>
+                        <GradientCTA onPress={handleEmailLogin} disabled={busy || authLoading}>
+                          <Text className="text-white text-base font-bold">
+                            {busy || authLoading ? 'Logging in…' : 'Login'}
+                          </Text>
                         </GradientCTA>
                       </View>
                     </>
@@ -704,13 +898,23 @@ export default function Login() {
                             value={phone}
                             onChangeText={setPhone}
                             keyboardType="phone-pad"
+                            autoComplete="tel"
+                            textContentType="telephoneNumber"
                           />
                         </View>
                       </GlassInput>
 
+                      {formError && loginMethod === 'phone' ? (
+                        <Text className="text-[13px] mb-4 text-center font-semibold" style={{ color: '#D64545' }}>
+                          {formError}
+                        </Text>
+                      ) : null}
+
                       <View style={{ marginBottom: 24 }}>
-                        <GradientCTA onPress={handleSendOtp}>
-                          <Text className="text-white text-base font-bold">Send OTP</Text>
+                        <GradientCTA onPress={handleSendOtp} disabled={busy}>
+                          <Text className="text-white text-base font-bold">
+                            {busy ? 'Sending…' : 'Send OTP'}
+                          </Text>
                         </GradientCTA>
                       </View>
                     </>
@@ -725,12 +929,17 @@ export default function Login() {
                     <View className="flex-1 h-px" style={{ backgroundColor: INPUT_BORDER }} />
                   </View>
 
-                  {/* Social buttons — solid white pills with soft shadow, matching reference */}
+                  {/* Social buttons */}
                   <View className="flex-row gap-3 mb-6">
-                    <SocialButton renderIcon={() => <GoogleGlyph size={18} />} label="Google" />
+                    <SocialButton
+                      renderIcon={() => <GoogleGlyph size={18} />}
+                      label="Google"
+                      onPress={() => handleSocial('Google')}
+                    />
                     <SocialButton
                       renderIcon={() => <Ionicons name="logo-apple" size={20} color="#000000" />}
                       label="Apple"
+                      onPress={() => handleSocial('Apple')}
                     />
                   </View>
 
@@ -739,7 +948,7 @@ export default function Login() {
                     <Text className="text-[13px]" style={{ color: TEXT_MUTED }}>
                       Don't have an account?{' '}
                     </Text>
-                    <TouchableOpacity onPress={() => router.push('/signup')}>
+                    <TouchableOpacity onPress={() => router.push('/signup' as any)}>
                       <Text className="text-[13px] font-bold" style={{ color: BRAND_GREEN_DARK }}>
                         Sign up
                       </Text>
@@ -799,7 +1008,11 @@ export default function Login() {
                               onChangeText={(text) => handleChangeDigit(text, index)}
                               onKeyPress={(e) => handleKeyPress(e, index)}
                               keyboardType="number-pad"
-                              maxLength={1}
+                              // Allow paste / SMS autofill of the full code;
+                              // handleChangeDigit spreads it across the boxes.
+                              maxLength={OTP_LENGTH}
+                              textContentType={index === 0 ? 'oneTimeCode' : 'none'}
+                              autoComplete={index === 0 ? 'sms-otp' : 'off'}
                               className="flex-1 text-xl font-bold text-center"
                               style={{ color: TEXT_DARK, backgroundColor: 'transparent' }}
                               placeholder=""
@@ -807,6 +1020,17 @@ export default function Login() {
                           </View>
                         ))}
                       </View>
+
+                      {otpMessage ? (
+                        <Text className="text-[13px] mb-4 text-center font-semibold" style={{ color: BRAND_GREEN_DARK }}>
+                          {otpMessage}
+                        </Text>
+                      ) : null}
+                      {formError ? (
+                        <Text className="text-[13px] mb-4 text-center font-semibold" style={{ color: '#D64545' }}>
+                          {formError}
+                        </Text>
+                      ) : null}
 
                       {secondsLeft > 0 ? (
                         <Text className="text-[13px] mb-8" style={{ color: TEXT_MUTED }}>
@@ -822,12 +1046,12 @@ export default function Login() {
                       )}
 
                       <View style={{ width: '100%' }}>
-                        <GradientCTA onPress={handleVerify} disabled={!isOtpComplete}>
+                        <GradientCTA onPress={handleVerify} disabled={!isOtpComplete || busy}>
                           <Text
                             className="text-base font-bold"
                             style={{ color: isOtpComplete ? '#FFFFFF' : TEXT_MUTED }}
                           >
-                            Verify
+                            {busy ? 'Verifying…' : 'Verify'}
                           </Text>
                         </GradientCTA>
                       </View>
@@ -890,8 +1114,22 @@ export default function Login() {
                             Verified!
                           </Text>
                           <Text className="text-[13px] text-center" style={{ color: TEXT_MUTED }}>
-                            Taking you to your trips...
+                            {otpMessage ?? 'Your number is verified.'}
                           </Text>
+                          <TouchableOpacity
+                            onPress={() => {
+                              setDigits(Array(OTP_LENGTH).fill(''));
+                              setOtpMessage(null);
+                              setFormError(null);
+                              setStep('form');
+                              setLoginMethod('email');
+                            }}
+                            className="mt-6"
+                          >
+                            <Text className="text-[13px] font-bold" style={{ color: BRAND_GREEN_DARK }}>
+                              Back to login
+                            </Text>
+                          </TouchableOpacity>
                         </>
                       )}
                     </View>

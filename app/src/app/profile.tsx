@@ -5,15 +5,13 @@ import {
   TouchableOpacity,
   ScrollView,
   Modal,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { useState } from 'react';
-import { BlurView } from 'expo-blur';
-
-const userName = 'Rohit';
-const userEmail = 'rohit@example.com';
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import { BlurView } from "expo-blur";
+import { useRouter } from "expo-router";
+import { useState } from "react";
+import { useAuth } from "../context/AuthContext";
 
 type MenuItemProps = {
   icon: keyof typeof Ionicons.glyphMap;
@@ -24,7 +22,7 @@ type MenuItemProps = {
 
 function GlassCard({
   children,
-  className = '',
+  className = "",
 }: {
   children: React.ReactNode;
   className?: string;
@@ -33,25 +31,14 @@ function GlassCard({
     <View
       className={`overflow-hidden rounded-[28px] border border-white/40 bg-white/20 ${className}`}
     >
-      <BlurView
-        intensity={20}
-        tint="light"
-        className="absolute inset-0"
-      />
+      <BlurView intensity={20} tint="light" className="absolute inset-0" />
 
-      <View className="bg-white/25">
-        {children}
-      </View>
+      <View className="bg-white/25">{children}</View>
     </View>
   );
 }
 
-function MenuItem({
-  icon,
-  title,
-  subtitle,
-  onPress,
-}: MenuItemProps) {
+function MenuItem({ icon, title, subtitle, onPress }: MenuItemProps) {
   return (
     <TouchableOpacity
       activeOpacity={0.75}
@@ -59,11 +46,7 @@ function MenuItem({
       className="flex-row items-center px-4 py-4"
     >
       <View className="h-11 w-11 items-center justify-center rounded-full border border-white/40 bg-white/30">
-        <Ionicons
-          name={icon}
-          size={21}
-          color="#0B3D62"
-        />
+        <Ionicons name={icon} size={21} color="#0B3D62" />
       </View>
 
       <View className="ml-3 flex-1">
@@ -71,28 +54,21 @@ function MenuItem({
           {title}
         </Text>
 
-        <Text className="mt-1 text-[12px] text-[#4B5A66]">
-          {subtitle}
-        </Text>
+        <Text className="mt-1 text-[12px] text-[#4B5A66]">{subtitle}</Text>
       </View>
 
-      <Ionicons
-        name="chevron-forward"
-        size={19}
-        color="#2A5A82"
-      />
+      <Ionicons name="chevron-forward" size={19} color="#2A5A82" />
     </TouchableOpacity>
   );
 }
 
 function Divider() {
-  return (
-    <View className="mx-4 h-px bg-white/40" />
-  );
+  return <View className="mx-4 h-px bg-white/40" />;
 }
 
 export default function Profile() {
   const router = useRouter();
+  const { user, logout } = useAuth();
 
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
@@ -104,13 +80,10 @@ export default function Profile() {
     setShowLogoutConfirm(false);
   };
 
-  const confirmLogout = () => {
+  const confirmLogout = async () => {
     setShowLogoutConfirm(false);
-
-    // If your app already has authentication/session state,
-    // clear that state here before navigating.
-
-    router.replace('/login');
+    await logout();
+    router.replace("/login");
   };
 
   return (
@@ -122,7 +95,7 @@ export default function Profile() {
       ========================================================= */}
 
       <Image
-        source={require('../../assets/images/jodtod/background_animation.png')}
+        source={require("../../assets/images/jodtod/background_animation.png")}
         resizeMode="cover"
         className="absolute inset-0 h-full w-full"
       />
@@ -132,12 +105,9 @@ export default function Profile() {
 
       {/* =========================================================
           SAFE AREA + MAIN SCROLLABLE CONTENT
-      ========================================================= */}
+      ======================================================= */}
 
-      <SafeAreaView
-        edges={['top']}
-        className="flex-1"
-      >
+      <SafeAreaView edges={["top"]} className="flex-1">
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerClassName="px-5 pb-10"
@@ -153,11 +123,7 @@ export default function Profile() {
               activeOpacity={0.7}
               className="h-11 w-11 items-center justify-center rounded-full bg-white/30"
             >
-              <Ionicons
-                name="arrow-back-outline"
-                size={24}
-                color="#0B3D62"
-              />
+              <Ionicons name="arrow-back-outline" size={24} color="#0B3D62" />
             </TouchableOpacity>
 
             {/* Title */}
@@ -167,13 +133,11 @@ export default function Profile() {
 
             {/* Edit */}
             <TouchableOpacity
-              onPress={() => router.push('/edit-profile')}
+              onPress={() => router.push("/edit-profile")}
               activeOpacity={0.8}
               className="rounded-full bg-[#00B894] px-5 py-2.5"
             >
-              <Text className="text-[14px] font-bold text-white">
-                Edit
-              </Text>
+              <Text className="text-[14px] font-bold text-white">Edit</Text>
             </TouchableOpacity>
           </View>
 
@@ -185,7 +149,7 @@ export default function Profile() {
             {/* Avatar container */}
             <View className="relative">
               <Image
-                source={require('../../assets/images/jodtod/people.png')}
+                source={require("../../assets/images/jodtod/people.png")}
                 resizeMode="cover"
                 className="h-36 w-36 rounded-full border-4 border-white/70"
               />
@@ -195,22 +159,18 @@ export default function Profile() {
                 activeOpacity={0.8}
                 className="absolute bottom-0 right-0 h-11 w-11 items-center justify-center rounded-full border-2 border-white bg-white/80"
               >
-                <Ionicons
-                  name="camera-outline"
-                  size={20}
-                  color="#0B3D62"
-                />
+                <Ionicons name="camera-outline" size={20} color="#0B3D62" />
               </TouchableOpacity>
             </View>
 
             {/* Name */}
             <Text className="mt-5 text-[28px] font-extrabold text-[#0B3D62]">
-              {userName}
+              {user?.name?.trim() || ""}
             </Text>
 
             {/* Email */}
             <Text className="mt-1 text-[15px] font-medium text-[#2A5A82]">
-              {userEmail}
+              {user?.email ?? user?.phone ?? ""}
             </Text>
           </View>
 
@@ -282,7 +242,7 @@ export default function Profile() {
               icon="person-outline"
               title="Personal Information"
               subtitle="Name, email, phone"
-              onPress={() => router.push('/personal-information')}
+              onPress={() => router.push("/personal-information")}
             />
 
             <Divider />
@@ -292,7 +252,7 @@ export default function Profile() {
               icon="settings-outline"
               title="Preferences"
               subtitle="Currency, theme, notifications"
-              onPress={() => router.push('/preferences')}
+              onPress={() => router.push("/preferences")}
             />
 
             <Divider />
@@ -302,7 +262,7 @@ export default function Profile() {
               icon="link-outline"
               title="Linked Accounts"
               subtitle="Google, phone number"
-              onPress={() => router.push('/linked-accounts')}
+              onPress={() => router.push("/linked-accounts")}
             />
 
             <Divider />
@@ -312,7 +272,7 @@ export default function Profile() {
               icon="settings-outline"
               title="App Settings"
               subtitle="Language, privacy, data"
-              onPress={() => router.push('/app-settings')}
+              onPress={() => router.push("/app-settings")}
             />
 
             <Divider />
@@ -322,7 +282,7 @@ export default function Profile() {
               icon="help-circle-outline"
               title="Help & Support"
               subtitle="FAQs, contact us"
-              onPress={() => router.push('/help-support')}
+              onPress={() => router.push("/help-support")}
             />
 
             <Divider />
@@ -332,7 +292,7 @@ export default function Profile() {
               icon="information-circle-outline"
               title="About JodTod"
               subtitle="Version 1.0.0"
-              onPress={() => router.push('/about-jodtod')}
+              onPress={() => router.push("/about-jodtod")}
             />
           </GlassCard>
 
@@ -346,11 +306,7 @@ export default function Profile() {
             className="mt-6 mb-4"
           >
             <View className="h-14 flex-row items-center justify-center rounded-[22px] border border-red-400/60 bg-white/50">
-              <Ionicons
-                name="log-out-outline"
-                size={21}
-                color="#EF4444"
-              />
+              <Ionicons name="log-out-outline" size={21} color="#EF4444" />
 
               <Text className="ml-2 text-[15px] font-bold text-red-500">
                 Log Out
@@ -383,11 +339,7 @@ export default function Profile() {
                 activeOpacity={0.7}
                 className="h-9 w-9 items-center justify-center rounded-full bg-black/5"
               >
-                <Ionicons
-                  name="close"
-                  size={21}
-                  color="#4B5A66"
-                />
+                <Ionicons name="close" size={21} color="#4B5A66" />
               </TouchableOpacity>
             </View>
 

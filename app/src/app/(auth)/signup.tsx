@@ -12,8 +12,11 @@ import {
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import Constants from 'expo-constants';
+import * as Google from 'expo-auth-session/providers/google';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
+import { useAuth } from '../../context/AuthContext';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -260,7 +263,7 @@ function SocialButton({
 function BubbleBackdrop({ children }: { children: ReactNode }) {
   return (
     <ImageBackground
-      source={require('../../assets/images/jodtod/background_onboarding.png')}
+      source={require('../../../assets/images/jodtod/background_onboarding.png')}
       resizeMode="cover"
       style={{ flex: 1, width: SCREEN_W }}
     >
@@ -279,7 +282,7 @@ function HeaderVisual({ height }: { height: number }) {
   return (
     <View style={{ width: SCREEN_W, height, overflow: 'hidden' }}>
       <Image
-        source={require('../../assets/images/jodtod/tip.png')}
+        source={require('../../../assets/images/jodtod/tip.png')}
         style={{
           position: 'absolute',
           top: -10,
@@ -313,14 +316,115 @@ function HeaderVisual({ height }: { height: number }) {
 
 export default function Signup() {
   const router = useRouter();
+  const { signup, loginWithGoogle, isLoading: authLoading } = useAuth();
+  const manifestExtra = (
+    Constants as unknown as {
+      manifest2?: { extra?: { expoClient?: { extra?: unknown } } };
+    }
+  ).manifest2?.extra?.expoClient?.extra;
+  const googleClientId = (
+    Constants.expoConfig?.extra?.googleWebClientId ??
+    (manifestExtra as { googleWebClientId?: string } | undefined)?.googleWebClientId
+  ) as string | undefined;
+  const googleHookClientId = googleClientId ?? 'google-client-id-not-configured';
+  const [, , promptGoogleAsync] = Google.useAuthRequest({
+    androidClientId: googleHookClientId,
+    iosClientId: googleHookClientId,
+    webClientId: googleHookClientId,
+    scopes: ['openid', 'email', 'profile'],
+  });
 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const handleSignup = async () => {
+    setFormError(null);
+    if (!fullName.trim()) {
+      setFormError('Enter your full name.');
+      return;
+    }
+    if (!email.trim() && !phone.trim()) {
+      setFormError('Enter your email address or phone number.');
+      return;
+    }
+    if (phone.trim() && (phone.trim().length < 7 || phone.trim().length > 20)) {
+      setFormError('Enter a valid phone number.');
+      return;
+    }
+    if (!password || password.length < 8) {
+      setFormError('Password must be at least 8 characters.');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setFormError('Passwords do not match.');
+      return;
+    }
+    if (!agreedToTerms) {
+      setFormError('Please agree to the Terms of Service and Privacy Policy.');
+      return;
+    }
+    setBusy(true);
+    try {
+      await signup({
+        name: fullName.trim(),
+        email: email.trim() || undefined,
+        phone: phone.trim() || undefined,
+        password,
+      });
+      // Signup creates an immediate backend session and dispatches the
+      // channel OTP. The account is PENDING until verification, so route
+      // to /verify-email (the (auth) layout also redirects there while
+      // verification is pending). Keep this session so verification can
+      // complete without logging in again.
+      router.replace('/verify-email' as any);
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : 'Signup failed. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSocial = async (provider: 'Google' | 'Apple') => {
+    if (provider === 'Apple') {
+      setFormError('Apple sign-in is not configured yet.');
+      return;
+    }
+    if (!googleClientId) {
+      setFormError('Google sign-in is not configured.');
+      return;
+    }
+
+    setBusy(true);
+    setFormError(null);
+    try {
+      const result = await promptGoogleAsync();
+      if (result.type !== 'success') {
+        if (result.type !== 'cancel' && result.type !== 'dismiss') {
+          setFormError('Google sign-in was not completed.');
+        }
+        return;
+      }
+      const idToken = (result as { params?: { id_token?: string }; authentication?: { idToken?: string } }).params?.id_token
+        ?? (result as { authentication?: { idToken?: string } }).authentication?.idToken;
+      if (!idToken) {
+        setFormError('Google did not return an identity credential.');
+        return;
+      }
+      await loginWithGoogle({ provider: 'google', id_token: idToken });
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : 'Google sign-in failed.');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <View className="flex-1">
@@ -414,6 +518,31 @@ export default function Signup() {
                       value={email}
                       onChangeText={setEmail}
                       keyboardType="email-address"
+                      autoCapitalize="none"
+                    />
+                  </View>
+                </GlassInput>
+
+                {/* Phone (optional — either email or phone is required) */}
+                <Text className="text-[13px] mb-2 font-semibold" style={{ color: TEXT_MUTED }}>
+                  Phone number (optional)
+                </Text>
+                <GlassInput style={{ marginBottom: 18 }}>
+                  <View className="flex-row items-center px-3.5 h-[52px]">
+                    <Ionicons
+                      name="call-outline"
+                      size={18}
+                      color={BRAND_GREEN_DARK}
+                      style={{ marginRight: 10 }}
+                    />
+                    <TextInput
+                      className="flex-1 text-sm"
+                      style={{ color: TEXT_DARK }}
+                      placeholder="Enter your phone number"
+                      placeholderTextColor="rgba(20,33,43,0.4)"
+                      value={phone}
+                      onChangeText={setPhone}
+                      keyboardType="phone-pad"
                       autoCapitalize="none"
                     />
                   </View>
@@ -516,9 +645,17 @@ export default function Signup() {
                   </Text>
                 </TouchableOpacity>
 
+                {formError ? (
+                  <Text className="text-[13px] mb-4 text-center font-semibold" style={{ color: '#D64545' }}>
+                    {formError}
+                  </Text>
+                ) : null}
+
                 <View style={{ marginBottom: 24 }}>
-                  <GradientCTA onPress={() => router.push('/(tabs)' as any)}>
-                    <Text className="text-white text-base font-bold">Sign Up</Text>
+                  <GradientCTA onPress={handleSignup} disabled={busy || authLoading}>
+                    <Text className="text-white text-base font-bold">
+                      {busy || authLoading ? 'Creating…' : 'Sign Up'}
+                    </Text>
                   </GradientCTA>
                 </View>
 
@@ -531,12 +668,17 @@ export default function Signup() {
                   <View className="flex-1 h-px" style={{ backgroundColor: INPUT_BORDER }} />
                 </View>
 
-                {/* Social buttons — solid white capsule pills, real multicolor Google mark */}
+                {/* Social buttons */}
                 <View className="flex-row gap-3 mb-6">
-                  <SocialButton renderIcon={() => <GoogleGlyph size={18} />} label="Google" />
+                  <SocialButton
+                    renderIcon={() => <GoogleGlyph size={18} />}
+                    label="Google"
+                    onPress={() => handleSocial('Google')}
+                  />
                   <SocialButton
                     renderIcon={() => <Ionicons name="logo-apple" size={20} color="#000000" />}
                     label="Apple"
+                    onPress={() => handleSocial('Apple')}
                   />
                 </View>
 
@@ -545,7 +687,7 @@ export default function Signup() {
                   <Text className="text-[13px]" style={{ color: TEXT_MUTED }}>
                     Already have an account?{' '}
                   </Text>
-                  <TouchableOpacity onPress={() => router.push('/login')}>
+                  <TouchableOpacity onPress={() => router.push('/login' as any)}>
                     <Text className="text-[13px] font-bold" style={{ color: GLOW_TO }}>
                       Login
                     </Text>

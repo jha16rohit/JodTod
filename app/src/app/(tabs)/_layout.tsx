@@ -1,8 +1,10 @@
-import { Tabs, useRouter } from "expo-router";
+import { Redirect, Tabs, useRouter } from "expo-router";
 import { View, Text, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
+import { useAuth } from "../../context/AuthContext";
+import AuthLoadingScreen from "../../components/auth/AuthLoadingScreen";
 
 // ---------------------------------------------------------------------------
 // Routes where the floating tab bar (Home / Groups / Activity / Settle + the
@@ -54,11 +56,15 @@ function CustomTabBar({ state, navigation }: any) {
     const routeIndex = state.routes.findIndex((route: any) => route.name === tab.name);
     const isFocused = state.index === routeIndex;
 
+    const handlePress = () => {
+      navigation.navigate(tab.name);
+    };
+
     return (
       <TouchableOpacity
         key={tab.name}
         activeOpacity={0.7}
-        onPress={() => navigation.navigate(tab.name)}
+        onPress={handlePress}
         className="flex-1 items-center justify-center"
       >
         <View className="items-center justify-center">
@@ -93,10 +99,8 @@ function CustomTabBar({ state, navigation }: any) {
           className="absolute inset-0 rounded-[30px] border border-white/80 bg-white/80"
         />
 
-        {/* SOFT WHITE GLASS SURFACE */}
         <View className="absolute inset-0 rounded-[30px] border border-[#E8EEF0] bg-white/90" />
 
-        {/* NAV ITEMS */}
         <View className="h-[78px] flex-row items-center px-2">
           {/* HOME */}
           <View className="flex-1">{renderTab(tabs[0])}</View>
@@ -104,17 +108,15 @@ function CustomTabBar({ state, navigation }: any) {
           {/* GROUPS */}
           <View className="flex-1">{renderTab(tabs[1])}</View>
 
-          {/* CENTER GAP */}
           <View className="w-[72px]" />
 
           {/* ACTIVITY */}
           <View className="flex-1">{renderTab(tabs[2])}</View>
 
-          {/* PROFILE */}
+          {/* SETTLE */}
           <View className="flex-1">{renderTab(tabs[3])}</View>
         </View>
 
-        {/* CENTER PLUS BUTTON */}
         <TouchableOpacity
           activeOpacity={0.85}
           onPress={() => router.push("/add-expense" as any)}
@@ -131,6 +133,16 @@ function CustomTabBar({ state, navigation }: any) {
 }
 
 export default function TabsLayout() {
+  const { isLoading, isAuthenticated, isVerificationPending } = useAuth();
+
+  if (isLoading) {
+    return <AuthLoadingScreen message="Loading your account…" />;
+  }
+
+  if (!isAuthenticated && !isVerificationPending) {
+    return <Redirect href="/login" />;
+  }
+
   return (
     <Tabs
       tabBar={(props) => <CustomTabBar {...props} />}
@@ -145,7 +157,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="groups/[id]/members" options={{ title: "Members" }} />
       <Tabs.Screen name="groups/[id]/expenses" options={{ title: "Expenses" }} />
       <Tabs.Screen name="groups/[id]/settings" options={{ title: "Group Settings" }} />
-      <Tabs.Screen name="groups/[id]/invites" options={{ title: "Invite Members" }} />
+      <Tabs.Screen name="groups/[id]/invite" options={{ title: "Invite Members" }} />
       <Tabs.Screen name="groups/[id]/edit" options={{ title: "Edit Group" }} />
       <Tabs.Screen name="activity" options={{ title: "Activity" }} />
       <Tabs.Screen name="settle" options={{ title: "Settle" }} />
