@@ -16,6 +16,7 @@ Important:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import smtplib
@@ -132,6 +133,24 @@ class SMTPEmailProvider(EmailProvider):
 
     name = "smtp"
 
+    @staticmethod
+    def _deliver_sync(
+        message: EmailMessage,
+        username: str,
+        password: str,
+        host: str,
+        port: int,
+    ) -> None:
+        """Blocking stdlib SMTP exchange (must run in a worker thread)."""
+        with smtplib.SMTP(
+            host,
+            port,
+            timeout=15,
+        ) as server:
+            server.starttls()
+            server.login(username, password)
+            server.send_message(message)
+
     async def send_otp_email(
         self,
         email: str,
@@ -158,14 +177,15 @@ class SMTPEmailProvider(EmailProvider):
         message.set_content(text_body)
 
         try:
-            with smtplib.SMTP(
+            # Never block the FastAPI event loop with sync sockets.
+            await asyncio.to_thread(
+                self._deliver_sync,
+                message,
+                username,
+                password,
                 settings.smtp_host,
                 settings.smtp_port,
-                timeout=15,
-            ) as server:
-                server.starttls()
-                server.login(username, password)
-                server.send_message(message)
+            )
         except smtplib.SMTPAuthenticationError as exc:
             logger.error(
                 "Email delivery failed: provider=smtp smtp_host=%s sender=%s recipient=%s status=failed error_type=authentication",

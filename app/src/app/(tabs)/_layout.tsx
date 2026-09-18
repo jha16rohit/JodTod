@@ -139,6 +139,10 @@ export default function TabsLayout() {
     return <Redirect href="/login" />;
   }
 
+  if (isVerificationPending) {
+    return <Redirect href="/verify-email" />;
+  }
+
   return (
     <Tabs
       tabBar={(props) => <CustomTabBar {...props} />}

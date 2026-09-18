@@ -401,24 +401,10 @@ export default function Login() {
     }
     setBusy(true);
     try {
-      const result = await login({ identifier: email.trim(), password });
-      // Two-step password login: the backend accepted the credentials and
-      // dispatched a login OTP without opening a session. Route to the
-      // login-OTP screen, which completes login via verify-otp.
-      if (result && "status" in result && result.status === 'otp_required') {
-        router.push({
-          pathname: '/login-otp',
-          params: {
-            destination: result.destination,
-            purpose: result.purpose,
-            message: result.message,
-            deviceId: result.deviceId,
-          },
-        } as never);
-        return;
-      }
-      // Fully authenticated session returned (edge case) → (auth) layout
-      // also redirects automatically when AuthContext becomes authenticated.
+      await login({ identifier: email.trim(), password });
+      // Email/password login opens the session directly. AuthContext
+      // adopts the returned AuthResponse; navigate straight to Home.
+      // login-otp is not used for normal email login.
       router.replace('/(tabs)' as any);
     } catch (e) {
       setFormError(e instanceof Error ? e.message : 'Login failed. Please try again.');

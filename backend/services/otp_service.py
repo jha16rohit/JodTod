@@ -40,6 +40,7 @@ from backend.core.security import hash_token, verify_token
 from backend.database import transaction
 from backend.models.otp import OTP, OTPDestinationType, OTPPurpose
 from backend.services.otp_providers import (
+    ProviderConfigurationError,
     ProviderDeliveryError,
     get_email_provider,
     get_sms_provider,
@@ -206,11 +207,20 @@ async def request_otp(
     """
     Issue a fresh OTP, superseding prior active ones.
 
+    Persistence and delivery are separated: the OTP row is committed
+    first, then the provider is contacted OUTSIDE any PostgreSQL
+    transaction so a slow SMTP exchange never holds a DB transaction
+    open and never blocks the event loop (SMTP runs in a worker
+    thread inside the provider).
+
     Raises OTPCooldownError / OTPRateLimitedError / ProviderDeliveryError.
+    A failed delivery invalidates the just-persisted row in a second
+    short transaction so no dangling usable code remains.
     """
     normalized, dest_type = _normalize_destination(destination, purpose)
     scope = f"otp:{purpose.value}"
 
+    # Phase 1: persist only (fast, no network).
     async with transaction(db):
         _check_rate_limit(scope, normalized)
 
@@ -253,53 +263,74 @@ async def request_otp(
         )
         db.add(record)
         await db.flush()
+        record_id = record.id
 
-        channel_mock = True
-        delivery = None
+    # Phase 2: deliver outside any DB transaction.
+    async def _invalidate_undelivered() -> None:
         try:
-            if dest_type == OTPDestinationType.PHONE:
-                provider = get_sms_provider()
-                channel_mock = provider.name == "mock"
-                message = (
-                    f"Your JodTod code is {code}. "
-                    f"It expires in {settings.otp_expire_seconds // 60} minutes."
+            async with transaction(db):
+                result = await db.execute(
+                    select(OTP).where(OTP.id == record_id)
                 )
-                delivery = await provider.send_otp(normalized, message)
-            else:
-                provider = get_email_provider()
-                channel_mock = provider.name == "mock"
-                delivery = await provider.send_otp_email(
-                    normalized,
-                    subject,
-                    f"Your JodTod code is {code}. "
-                    f"It expires in {settings.otp_expire_seconds // 60} minutes.",
-                )
-        except ProviderDeliveryError:
-            # Delivery failure rolls back issuance: no dangling code the
-            # user can never receive.
-            raise
+                stored = result.scalar_one_or_none()
+                if stored is not None and stored.consumed_at is None:
+                    stored.consumed_at = _utcnow()
+        except Exception:
+            # Invalidation is best-effort; the original delivery error
+            # remains authoritative for the caller.
+            pass
 
-        assert delivery is not None
-        if (
-            dest_type == OTPDestinationType.EMAIL
-            and not delivery.accepted
-        ):
-            # A generated/stored email code is not a successful dispatch.
-            raise ProviderDeliveryError(
-                "The email provider did not accept the OTP."
+    channel_mock = True
+    delivery = None
+    try:
+        if dest_type == OTPDestinationType.PHONE:
+            provider = get_sms_provider()
+            channel_mock = provider.name == "mock"
+            message = (
+                f"Your JodTod code is {code}. "
+                f"It expires in {settings.otp_expire_seconds // 60} minutes."
             )
-        dev_code = code if _dev_disclosure_allowed(channel_mock) else None
+            delivery = await provider.send_otp(normalized, message)
+        else:
+            provider = get_email_provider()
+            channel_mock = provider.name == "mock"
+            delivery = await provider.send_otp_email(
+                normalized,
+                subject,
+                f"Your JodTod code is {code}. "
+                f"It expires in {settings.otp_expire_seconds // 60} minutes.",
+            )
+    except (ProviderDeliveryError, ProviderConfigurationError):
+        # Delivery failure invalidates issuance: no dangling code the
+        # user can never receive.
+        await _invalidate_undelivered()
+        raise
+    except Exception:
+        await _invalidate_undelivered()
+        raise
 
-        return OTPDispatch(
-            record_id=record.id,
-            destination=normalized,
-            expires_at=expires_at,
-            resend_available_at=resend_available_at,
-            provider=delivery.provider,
-            provider_accepted=delivery.accepted,
-            delivery_status=delivery.delivery_status,
-            dev_code=dev_code,
+    assert delivery is not None
+    if (
+        dest_type == OTPDestinationType.EMAIL
+        and not delivery.accepted
+    ):
+        # A generated/stored email code is not a successful dispatch.
+        await _invalidate_undelivered()
+        raise ProviderDeliveryError(
+            "The email provider did not accept the OTP."
         )
+    dev_code = code if _dev_disclosure_allowed(channel_mock) else None
+
+    return OTPDispatch(
+        record_id=record_id,
+        destination=normalized,
+        expires_at=expires_at,
+        resend_available_at=resend_available_at,
+        provider=delivery.provider,
+        provider_accepted=delivery.accepted,
+        delivery_status=delivery.delivery_status,
+        dev_code=dev_code,
+    )
 
 
 # ++++++++++++++++ VERIFY ++++++++++++++++

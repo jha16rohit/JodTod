@@ -3,26 +3,30 @@
 import hashlib
 import secrets
 
-from pwdlib import PasswordHash
+from argon2 import PasswordHasher
+from argon2.exceptions import InvalidHash, VerificationError, VerifyMismatchError
 
 
 # ============================================================
 # PASSWORD HASHING
 # ============================================================
 
-_password_hash = PasswordHash.recommended()
+# Argon2id (matches password_hash_algorithm=argon2id). Called without
+# a `salt` keyword so it works on both argon2-cffi 21.x (hash(password))
+# and 25.x (hash(password, *, salt=None)); pwdlib 0.3.1's Argon2Hasher
+# passes salt=... unconditionally and crashes on 21.x.
+_password_hasher = PasswordHasher()
 
 
 def hash_password(password: str) -> str:
     """
-    Hash a user's password using the recommended password
-    hashing algorithm provided by pwdlib.
+    Hash a user's password with Argon2id.
     """
 
     if not password:
         raise ValueError("Password cannot be empty.")
 
-    return _password_hash.hash(password)
+    return _password_hasher.hash(password)
 
 
 def verify_password(
@@ -31,15 +35,27 @@ def verify_password(
 ) -> bool:
     """
     Verify a plaintext password against the stored password hash.
+
+    Argon2 PHC hashes generated via pwdlib share the same format, so
+    existing stored hashes keep verifying. Unknown/legacy formats fall
+    back to pwdlib verification when available.
     """
 
     if not plain_password or not password_hash:
         return False
 
     try:
-        return _password_hash.verify(
-            plain_password,
-            password_hash,
+        return _password_hasher.verify(password_hash, plain_password)
+    except (VerifyMismatchError, VerificationError, InvalidHash):
+        pass
+    except Exception:
+        return False
+
+    try:
+        from pwdlib import PasswordHash
+
+        return bool(
+            PasswordHash.recommended().verify(plain_password, password_hash)
         )
     except Exception:
         return False

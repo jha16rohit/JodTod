@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
-from backend.schemas.auth import LoginRequest, LoginStatusResponse
+from backend.schemas.auth import AuthResponse, LoginRequest
 from backend.services.auth_login_service import login_with_password
 
 router = APIRouter(
@@ -13,22 +13,18 @@ router = APIRouter(
 
 @router.post(
     "/login",
-    response_model=LoginStatusResponse,
+    response_model=AuthResponse,
 )
 async def login(
     payload: LoginRequest,
     db: AsyncSession = Depends(get_db),
-) -> LoginStatusResponse:
+) -> AuthResponse:
     """
-    Step 1 of the two-step password login.
+    Password login.
 
-    Validates the identifier (email or phone) + password and dispatches
-    a login OTP (EMAIL_LOGIN via SMTP, or PHONE_LOGIN for phone-only
-    accounts). Returns a LoginStatusResponse with status "otp_required".
-    No session is created and no tokens are issued here.
-
-    The client must complete login at POST /auth/verify-otp with the
-    returned destination + purpose, which then opens the session.
+    Validates the identifier (email or phone) + password, opens the
+    device session, and returns the standard AuthResponse with
+    access/refresh tokens. No login OTP is required.
 
     Business logic must remain in auth_login_service.py.
     """

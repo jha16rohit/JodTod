@@ -342,19 +342,17 @@ function isAuthResponse(value: unknown): value is AuthResponse {
 }
 
 /**
- * Step 1 of the two-step password login.
+ * Password login.
  *
  * Flow:
  *
  * 1. Validate identifier + password.
  * 2. Resolve the device ID.
- * 3. POST /auth/login — the backend validates the credentials and
- *    dispatches a login OTP. No session is created here.
- * 4a. If the backend returns a full AuthResponse (credential/existing
- *     session edge case): persist tokens + cached user.
- * 4b. Otherwise it returns the pending "otp_required" step. Nothing is
- *     persisted — the caller must route to the login-OTP screen, where
- *     verify-otp (purpose email_login / phone_login) opens the session.
+ * 3. POST /auth/login — the backend validates the credentials, opens
+ *    the device session, and returns a full AuthResponse.
+ * 4. Persist tokens + cached user. The caller navigates to Home.
+ *    A legacy "otp_required" response is still mapped for backward
+ *    compatibility but normal email login no longer uses login-otp.
  */
 export async function login(input: LoginRequest): Promise<LoginResult> {
   const identifier = input.identifier.trim();

@@ -39,7 +39,7 @@ from backend.database import transaction
 from backend.models.session import Session
 from backend.models.user import AccountStatus, User
 from backend.schemas.auth import AuthResponse, SignupRequest, TokenResponse
-from backend.schemas.user import AuthenticatedUser
+from backend.schemas.user import AuthenticatedUser, with_provider_flags
 from backend.services.email_verification_service import (
     send_signup_verification_best_effort,
 )
@@ -355,6 +355,11 @@ async def create_account(
       # MissingGreenlet).
       # ----------------------------------------------------
       await db.refresh(user)
+      # refresh() autobegins a read transaction on the session; close it
+      # so the best-effort verification dispatch below owns and commits
+      # its own transactions (otherwise the OTP row would join this
+      # stray read transaction and roll back on session close).
+      await db.commit()
 
       # ----------------------------------------------------
       # 4. Verification runs alongside the immediate session.
@@ -383,8 +388,12 @@ async def create_account(
       )
 
       return AuthResponse(
-          user=AuthenticatedUser.model_validate(
-              user
+          user=with_provider_flags(
+              AuthenticatedUser.model_validate(
+                  user
+              ),
+              google_subject=user.google_subject,
+              apple_subject=user.apple_subject,
           ),
           tokens=TokenResponse(
               access_token=access_token,
