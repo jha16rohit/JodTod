@@ -1,8 +1,10 @@
-import { Tabs, useRouter } from "expo-router";
+import { Redirect, Tabs, useRouter } from "expo-router";
 import { View, Text, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
+import { useAuth } from "../../context/AuthContext";
+import AuthLoadingScreen from "../../components/auth/AuthLoadingScreen";
 
 function CustomTabBar({ state, navigation }: any) {
   const router = useRouter();
@@ -23,11 +25,11 @@ const tabs = [
     label: "Activity",
     icon: "document-text",
   },
-{
-  name: "settle",
-  label: "Settle",
-  icon: "paper-plane",
-},
+  {
+    name: "settle",
+    label: "Settle",
+    icon: "paper-plane",
+  },
 ];
 
   const renderTab = (tab: any) => {
@@ -37,11 +39,15 @@ const tabs = [
 
     const isFocused = state.index === routeIndex;
 
+    const handlePress = () => {
+      navigation.navigate(tab.name);
+    };
+
     return (
       <TouchableOpacity
         key={tab.name}
         activeOpacity={0.7}
-        onPress={() => navigation.navigate(tab.name)}
+        onPress={handlePress}
         className="flex-1 items-center justify-center"
       >
         <View className="items-center justify-center">
@@ -52,11 +58,10 @@ const tabs = [
           />
 
           <Text
-            className={`mt-1 text-[11px] ${
-              isFocused
-                ? "font-bold text-[#0E8074]"
-                : "font-medium text-[#8A94A6]"
-            }`}
+            className={`mt-1 text-[11px] ${isFocused
+              ? "font-bold text-[#0E8074]"
+              : "font-medium text-[#8A94A6]"
+              }`}
           >
             {tab.label}
           </Text>
@@ -71,49 +76,35 @@ const tabs = [
 
   return (
     <View className="absolute bottom-5 left-4 right-4 z-50">
-
-      {/* FLOATING NAVIGATION CONTAINER */}
       <View className="h-[78px] overflow-visible rounded-[30px]">
-
-        {/* GLASS / BLUR LAYER */}
         <BlurView
           intensity={85}
           tint="light"
           className="absolute inset-0 rounded-[30px] border border-white/80 bg-white/80"
         />
 
-        {/* SOFT WHITE GLASS SURFACE */}
         <View className="absolute inset-0 rounded-[30px] border border-[#E8EEF0] bg-white/90" />
 
-        {/* NAV ITEMS */}
         <View className="h-[78px] flex-row items-center px-2">
-
-          {/* HOME */}
           <View className="flex-1">
             {renderTab(tabs[0])}
           </View>
 
-          {/* GROUPS */}
           <View className="flex-1">
             {renderTab(tabs[1])}
           </View>
 
-          {/* CENTER GAP */}
           <View className="w-[72px]" />
 
-          {/* ACTIVITY */}
           <View className="flex-1">
             {renderTab(tabs[2])}
           </View>
 
-          {/* PROFILE */}
           <View className="flex-1">
             {renderTab(tabs[3])}
           </View>
-
         </View>
 
-        {/* CENTER PLUS BUTTON */}
         <TouchableOpacity
           activeOpacity={0.85}
           onPress={() => router.push("/add-expense" as any)}
@@ -132,13 +123,26 @@ const tabs = [
             />
           </View>
         </TouchableOpacity>
-
       </View>
     </View>
   );
 }
 
 export default function TabsLayout() {
+  const { isLoading, isAuthenticated, isVerificationPending } = useAuth();
+
+  if (isLoading) {
+    return <AuthLoadingScreen message="Loading your account…" />;
+  }
+
+  if (!isAuthenticated && !isVerificationPending) {
+    return <Redirect href="/login" />;
+  }
+
+  if (isVerificationPending) {
+    return <Redirect href="/verify-email" />;
+  }
+
   return (
     <Tabs
       tabBar={(props) => <CustomTabBar {...props} />}
