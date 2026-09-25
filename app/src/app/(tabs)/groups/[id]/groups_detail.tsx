@@ -1,3 +1,4 @@
+import React, { useState, useCallback } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Dimensions } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,6 +15,7 @@ import {
   inr,
 } from '@/components/groups/ui';
 import { getGroup } from '@/lib/mockGroups';
+import { AddActionBottomSheet } from '@/components/AddActionBottomSheet';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -22,6 +24,39 @@ export default function GroupDetails() {
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const group = getGroup(id as string);
+
+  const [sheetVisible, setSheetVisible] = useState(false);
+
+  const handleAddActionPress = useCallback(() => {
+    setSheetVisible(true);
+  }, []);
+
+  const handleSheetClose = useCallback(() => {
+    setSheetVisible(false);
+  }, []);
+
+  const handleAddExpense = useCallback(() => {
+    setSheetVisible(false);
+    // TODO: Navigate to Add Expense screen
+    console.log('Add Expense pressed');
+  }, []);
+
+  const handleAddSettlement = useCallback(() => {
+    setSheetVisible(false);
+    // TODO: Navigate to Add Settlement screen
+    console.log('Add Settlement pressed');
+  }, []);
+
+  const handleAddMember = useCallback(() => {
+    setSheetVisible(false);
+    router.push(`/(tabs)/groups/${id}/invite` as any);
+  }, [id, router]);
+
+  const handleScanReceipt = useCallback(() => {
+    setSheetVisible(false);
+    // TODO: Navigate to Scan Receipt screen (Coming Soon)
+    console.log('Scan Receipt pressed - Coming Soon');
+  }, []);
 
   if (!group) {
     return (
@@ -170,6 +205,16 @@ export default function GroupDetails() {
           </View>
         </View>
       </ScrollView>
+
+      <AddActionBottomSheet
+        visible={sheetVisible}
+        groupName={group.name}
+        onClose={handleSheetClose}
+        onAddExpense={handleAddExpense}
+        onAddSettlement={handleAddSettlement}
+        onAddMember={handleAddMember}
+        onScanReceipt={handleScanReceipt}
+      />
     </View>
   );
 }
