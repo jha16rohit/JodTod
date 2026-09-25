@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { View, Text, TouchableOpacity, TextInput } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, Image, StyleSheet } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,45 +7,105 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // ---------------------------------------------------------------------------
-// Shared palette — same recipe as login.tsx so every Groups screen stays on
-// the same visual language (glass cards, mint-green gradient CTAs).
+// Shared palette — settle-tab theme (navy + teal glass). Same key names so
+// every Groups screen picks up the new look with zero text changes.
 // ---------------------------------------------------------------------------
 
 export const colors = {
-  brandLight: '#00E6A8',
-  brand: '#00B894',
-  brandDark: '#00896B',
-  textDark: '#14212B',
-  textMuted: '#4B5A66',
+  brandLight: '#34C99E',
+  brand: '#149C73',
+  brandDark: '#0C6E52',
+  textDark: '#0B3D62',
+  textMuted: '#5B7C93',
   headerTitle: '#0B3D62',
-  headerSub: '#2A5A82',
-  inputBorder: 'rgba(255,255,255,0.45)',
-  danger: '#E85D5D',
-  dangerBg: 'rgba(232,93,93,0.12)',
-  success: '#00B894',
-  successBg: 'rgba(0,184,148,0.12)',
+  headerSub: '#3E6E8E',
+  inputBorder: 'rgba(255,255,255,0.6)',
+  danger: '#F04F38',
+  dangerBg: '#FDE3E8',
+  success: '#149C73',
+  successBg: '#E7F7F2',
   neutralBg: 'rgba(75,90,102,0.10)',
   bg: '#F4FAF8',
+  faint: '#8DA0B1',
+  infoBlue: '#2563EB',
+  infoBlueBg: '#DDEBFF',
+  accentOrange: '#E0932E',
+  accentOrangeBg: '#FFF3DE',
+};
+
+const GROUP_BG_IMAGE = require('../../../assets/images/jodtod/background_onboarding.png');
+
+export const cardShadow = {
+  shadowColor: '#0B3D62',
+  shadowOffset: { width: 0, height: 5 },
+  shadowOpacity: 0.1,
+  shadowRadius: 9,
+  elevation: 4,
 };
 
 export const CARD_PADDING_H = 20;
 
 // ---------------------------------------------------------------------------
-// Page background — soft mint/blue wash standing in for the bubble artwork.
+// Page background — settle-tab artwork (onboarding image + soft veil).
 // Fills the whole screen; each page handles its own top/bottom safe padding
 // so it looks right on notch phones, tall Android phones, and small phones.
 // ---------------------------------------------------------------------------
 
+export function ScreenBackground() {
+  return (
+    <>
+      <Image source={GROUP_BG_IMAGE} className="absolute inset-0 h-full w-full" resizeMode="cover" />
+      {/* Soft glow orbs for depth — background artwork stays visible through the glass */}
+      <View
+        className="absolute rounded-full"
+        pointerEvents="none"
+        style={{ width: 280, height: 280, top: -90, right: -80, backgroundColor: 'rgba(52,201,158,0.20)' }}
+      />
+      <View
+        className="absolute rounded-full"
+        pointerEvents="none"
+        style={{ width: 220, height: 220, top: 180, left: -90, backgroundColor: 'rgba(37,99,235,0.12)' }}
+      />
+      <View
+        className="absolute rounded-full"
+        pointerEvents="none"
+        style={{ width: 260, height: 260, bottom: -100, right: -70, backgroundColor: 'rgba(224,147,46,0.12)' }}
+      />
+    </>
+  );
+}
+
 export function BubbleBackdrop({ children }: { children: ReactNode }) {
   return (
-    <LinearGradient colors={['#EAF9F3', '#F4FAFC', '#FFFFFF']} style={{ flex: 1 }}>
+    <View style={{ flex: 1 }}>
+      <ScreenBackground />
       {children}
-    </LinearGradient>
+    </View>
+  );
+}
+
+export function GlassLayers({ radius = 24 }: { radius?: number }) {
+  return (
+    <>
+      <BlurView intensity={28} tint="default" style={[StyleSheet.absoluteFill, { borderRadius: radius }]} />
+      <LinearGradient
+        colors={['rgba(255,255,255,0.38)', 'rgba(198,228,222,0.22)']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[StyleSheet.absoluteFill, { borderRadius: radius }]}
+      />
+      <LinearGradient
+        colors={['rgba(255,255,255,0.35)', 'rgba(255,255,255,0)']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 0.4 }}
+        style={[StyleSheet.absoluteFill, { borderRadius: radius }]}
+      />
+    </>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Glass card
+// Glass card — settle-tab recipe (navy shadow, layered glass, white border)
 // ---------------------------------------------------------------------------
 
 export function GlassCard({
@@ -58,18 +118,18 @@ export function GlassCard({
   style?: any;
 }) {
   return (
-    <View className={`overflow-hidden border border-white/40 bg-white/30 ${className}`} style={style}>
-      {/* Explicit radius mirrors the card (default 24) so the veil can never
-          paint square corners if an ancestor fails to clip this native view. */}
-      <BlurView intensity={20} tint="light" className="absolute inset-0" style={{ borderRadius: 24 }} />
-      <View>{children}</View>
+    <View className={`rounded-[24px] ${className}`} style={[cardShadow, { backgroundColor: 'rgba(255,255,255,0.01)' }, style]}>
+      <View className="overflow-hidden rounded-[24px] border border-white/60">
+        <GlassLayers radius={24} />
+        <View className="relative z-10">{children}</View>
+      </View>
     </View>
   );
 }
 
 export function GlassInput({ children, style }: { children: ReactNode; style?: any }) {
   return (
-    <View className="overflow-hidden rounded-2xl border border-white/40 bg-white/40" style={style}>
+    <View className="overflow-hidden rounded-2xl border border-white/40 bg-white/25" style={style}>
       {children}
     </View>
   );
@@ -134,32 +194,23 @@ export function GradientCTA({
       onPress={onPress}
       disabled={disabled}
       activeOpacity={0.9}
+      className="items-center justify-center"
       style={{
+        height: CTA_HEIGHT,
         borderRadius: radius,
+        backgroundColor: disabled ? '#A9C9BE' : colors.brand,
+        gap: 8,
+        paddingHorizontal: 18,
+        ...cardShadow,
         shadowColor: disabled ? 'transparent' : colors.brand,
-        shadowOpacity: disabled ? 0 : 0.4,
-        shadowRadius: 14,
-        shadowOffset: { width: 0, height: 6 },
-        elevation: disabled ? 0 : 6,
+        shadowOpacity: disabled ? 0 : 0.35,
+        elevation: disabled ? 0 : 4,
       }}
     >
-      <LinearGradient
-        colors={disabled ? ['#D7E0E0', '#C7D2D2'] : [colors.brandLight, colors.brand, colors.brandDark]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-        style={{
-          height: CTA_HEIGHT,
-          borderRadius: radius,
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 8,
-          paddingHorizontal: 18,
-        }}
-      >
+      <View className="flex-row items-center justify-center" style={{ gap: 8 }}>
         {children}
         {icon ? <Ionicons name={icon} size={17} color={disabled ? colors.textMuted : '#fff'} /> : null}
-      </LinearGradient>
+      </View>
     </TouchableOpacity>
   );
 }
@@ -193,8 +244,11 @@ export function ScreenHeader({
     >
       <TouchableOpacity
         onPress={onBack ?? (() => router.back())}
-        className="w-10 h-10 rounded-full items-center justify-center bg-white/60 border border-white/50"
+        className="w-10 h-10 rounded-full items-center justify-center border border-white/60 overflow-hidden"
+        style={[cardShadow, { backgroundColor: 'rgba(255,255,255,0.01)' }]}
       >
+        <GlassLayers radius={20} />
+        <View className="absolute inset-0 bg-white/20" />
         <Ionicons name="chevron-back" size={20} color={colors.textDark} />
       </TouchableOpacity>
 
@@ -212,8 +266,11 @@ export function ScreenHeader({
       {rightIcon ? (
         <TouchableOpacity
           onPress={onRightPress}
-          className="w-10 h-10 rounded-full items-center justify-center bg-white/60 border border-white/50"
+          className="w-10 h-10 rounded-full items-center justify-center border border-white/60 overflow-hidden"
+          style={[cardShadow, { backgroundColor: 'rgba(255,255,255,0.01)' }]}
         >
+          <GlassLayers radius={20} />
+          <View className="absolute inset-0 bg-white/20" />
           <Ionicons name={rightIcon} size={19} color={colors.textDark} />
         </TouchableOpacity>
       ) : (
@@ -224,7 +281,8 @@ export function ScreenHeader({
 }
 
 // ---------------------------------------------------------------------------
-// Avatar — gradient initials circle
+// Avatar — real photo when `photoUri` is set (group cover / member face),
+// gradient initials only as a fallback.
 // ---------------------------------------------------------------------------
 
 const AVATAR_PALETTE = [
@@ -236,7 +294,23 @@ const AVATAR_PALETTE = [
   ['#84FAB0', '#8FD3F4'],
 ];
 
-export function Avatar({ name, size = 36 }: { name: string; size?: number }) {
+export function Avatar({ name, size = 36, photoUri }: { name: string; size?: number; photoUri?: string }) {
+  if (photoUri) {
+    return (
+      <Image
+        source={{ uri: photoUri }}
+        style={{
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          borderWidth: 2,
+          borderColor: '#fff',
+          backgroundColor: colors.neutralBg,
+        }}
+      />
+    );
+  }
+
   const idx = name.charCodeAt(0) % AVATAR_PALETTE.length;
   const initials = name.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
 
@@ -266,8 +340,8 @@ export type GroupStatus = 'Active' | 'Completed' | 'Archived';
 
 const STATUS_STYLE: Record<GroupStatus, { bg: string; fg: string }> = {
   Active: { bg: colors.successBg, fg: colors.brandDark },
-  Completed: { bg: 'rgba(74,144,226,0.12)', fg: '#3268A6' },
-  Archived: { bg: colors.neutralBg, fg: colors.textMuted },
+  Completed: { bg: colors.infoBlueBg, fg: colors.infoBlue },
+  Archived: { bg: colors.neutralBg, fg: colors.faint },
 };
 
 export function StatusPill({ status }: { status: GroupStatus }) {

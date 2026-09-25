@@ -376,6 +376,7 @@ async function authRequest<T>(
       signal: controller.signal,
     });
   } catch (error) {
+    console.error('Auth API Network Error:', error);
     if (error instanceof DOMException && error.name === "AbortError") {
       throw new AuthError(
         "The request timed out. Please try again.",
@@ -428,6 +429,11 @@ async function authRequest<T>(
   const payload = await parseJsonSafe(response);
 
   if (!response.ok) {
+    console.error('Auth API Response Error:', {
+      status: response.status,
+      statusText: response.statusText,
+    });
+
     /**
      * Login gets a UI-friendly invalid-credentials error.
      */

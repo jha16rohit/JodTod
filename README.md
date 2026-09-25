@@ -8,24 +8,24 @@ This README covers two things: **what is implemented in the backend** and **whic
 
 ## 1. What is implemented in the backend
 
-| Area | File | Status |
-|---|---|---|
-| Configuration (reads `backend/.env`) | `backend/config.py` | Done |
-| Database engine + connection check | `backend/database.py` | Done |
-| SQLAlchemy models | `backend/models/` (`user`, `session`, `otp`, `email_verification`, `password_reset`) | Done |
-| Alembic migrations | `alembic.ini`, `backend/alembic/` | Done |
-| Initial migration `55fd1c0613a9` | Creates the 5 tables below | Done |
-| FastAPI app + `GET /health` | `backend/main.py` | Done |
+| Area                                 | File                                                                                 | Status |
+| ------------------------------------ | ------------------------------------------------------------------------------------ | ------ |
+| Configuration (reads `backend/.env`) | `backend/config.py`                                                                  | Done   |
+| Database engine + connection check   | `backend/database.py`                                                                | Done   |
+| SQLAlchemy models                    | `backend/models/` (`user`, `session`, `otp`, `email_verification`, `password_reset`) | Done   |
+| Alembic migrations                   | `alembic.ini`, `backend/alembic/`                                                    | Done   |
+| Initial migration `55fd1c0613a9`     | Creates the 5 tables below                                                           | Done   |
+| FastAPI app + `GET /health`          | `backend/main.py`                                                                    | Done   |
 
 **Database tables created by the initial migration**
 
-| Table | Purpose |
-|---|---|
-| `users` | Account identity (email, phone, password hash, verification flags, Google/Apple IDs) |
-| `sessions` | Refresh-token sessions per device (stores token hash only) |
-| `otp_records` | OTP lifecycle (hash, expiry, attempts, lock) |
-| `email_verifications` | Email verification token hashes |
-| `password_resets` | Password reset token hashes |
+| Table                 | Purpose                                                                              |
+| --------------------- | ------------------------------------------------------------------------------------ |
+| `users`               | Account identity (email, phone, password hash, verification flags, Google/Apple IDs) |
+| `sessions`            | Refresh-token sessions per device (stores token hash only)                           |
+| `otp_records`         | OTP lifecycle (hash, expiry, attempts, lock)                                         |
+| `email_verifications` | Email verification token hashes                                                      |
+| `password_resets`     | Password reset token hashes                                                          |
 
 **Not implemented yet:** schemas, password/OTP hashing, JWT, services, auth middleware/dependencies, auth routes, user routes, and the mobile auth layer.
 
@@ -185,7 +185,7 @@ Windows:
 ```powershell
 cd JodTod
 .\backend\.venv\Scripts\Activate.ps1
-uvicorn backend.main:app --host 0.0.0.0 --port 5000 --reload
+uvicorn backend.main:app --host 0.0.0.0 --port 5001 --reload
 ```
 
 macOS:
@@ -193,21 +193,21 @@ macOS:
 ```bash
 cd JodTod
 source backend/.venv/bin/activate
-uvicorn backend.main:app --host 0.0.0.0 --port 5000 --reload
+uvicorn backend.main:app --host 0.0.0.0 --port 5001 --reload
 ```
 
-Check it works by opening `http://localhost:5000/health` or running:
+Check it works by opening `http://localhost:5001/health` or running:
 
 Windows:
 
 ```powershell
-Invoke-WebRequest http://localhost:5000/health
+Invoke-WebRequest http://localhost:5001/health
 ```
 
 macOS:
 
 ```bash
-curl http://localhost:5000/health
+curl http://localhost:5001/health
 ```
 
 Expected: a JSON response with `"status": "ok"`.
@@ -282,12 +282,12 @@ npx expo start
 **When:** the app cannot reach the backend.
 **Why:** `localhost` on a phone means the phone itself, so each target needs a different address.
 
-| Where the app runs | Backend address |
-|---|---|
-| Android emulator | `http://10.0.2.2:5000` |
-| iOS simulator (macOS only) | `http://localhost:5000` |
-| Web | `http://localhost:5000` |
-| Physical phone | `http://<YOUR-COMPUTER-LAN-IP>:5000` |
+| Where the app runs         | Backend address                      |
+| -------------------------- | ------------------------------------ |
+| Android emulator           | `http://10.0.2.2:5001`               |
+| iOS simulator (macOS only) | `http://localhost:5001`              |
+| Web                        | `http://localhost:5001`              |
+| Physical phone             | `http://<YOUR-COMPUTER-LAN-IP>:5001` |
 
 Find your LAN IP:
 
@@ -303,7 +303,7 @@ macOS (Wi-Fi is usually `en0`):
 ipconfig getifaddr en0
 ```
 
-For a physical phone, the phone and computer must be on the same network, the backend must be started with `--host 0.0.0.0`, and the firewall must allow port 5000. Do not commit your personal LAN IP.
+For a physical phone, the phone and computer must be on the same network, the backend must be started with `--host 0.0.0.0`, and the firewall must allow port 5001. Do not commit your personal LAN IP.
 
 ---
 
@@ -324,12 +324,12 @@ Then start the backend and confirm `GET /health` works. Make sure the diff conta
 
 ## 9. Common errors
 
-| Error | Cause | Fix |
-|---|---|---|
-| `ModuleNotFoundError: No module named 'backend'` | Running from the wrong folder | `cd` to the repo root and retry |
-| `JWT_SECRET_KEY` or `DATABASE_URL` missing | `.env` is missing or in the wrong place | It must be at `backend/.env` |
-| Database connection fails | Wrong URL, password, or network | Read the exact error first; check the URL, URL-encoding of the password, and internet access |
-| Mobile app cannot reach backend | Wrong API address or firewall | Recheck the table in section 7 and that the backend is running on `0.0.0.0:5000` |
+| Error                                            | Cause                                   | Fix                                                                                          |
+| ------------------------------------------------ | --------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `ModuleNotFoundError: No module named 'backend'` | Running from the wrong folder           | `cd` to the repo root and retry                                                              |
+| `JWT_SECRET_KEY` or `DATABASE_URL` missing       | `.env` is missing or in the wrong place | It must be at `backend/.env`                                                                 |
+| Database connection fails                        | Wrong URL, password, or network         | Read the exact error first; check the URL, URL-encoding of the password, and internet access |
+| Mobile app cannot reach backend                  | Wrong API address or firewall           | Recheck the table in section 7 and that the backend is running on `0.0.0.0:5001`             |
 
 ---
 
