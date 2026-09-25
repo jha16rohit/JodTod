@@ -269,14 +269,14 @@ export default function Home() {
               ]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
-              style={StyleSheet.absoluteFill}
+              style={[StyleSheet.absoluteFill, { borderRadius: 32 }]}
             />
             {/* Top glass highlight, like light catching the edge of frosted glass */}
             <LinearGradient
               colors={["rgba(255,255,255,0.22)", "rgba(255,255,255,0)"]}
               start={{ x: 0, y: 0 }}
               end={{ x: 0, y: 0.6 }}
-              style={StyleSheet.absoluteFill}
+              style={[StyleSheet.absoluteFill, { borderRadius: 32 }]}
             />
 
             <View className="p-6">
@@ -379,13 +379,13 @@ export default function Home() {
                   colors={["rgba(255,255,255,0.6)", "rgba(198,228,222,0.42)"]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
-                  style={StyleSheet.absoluteFill}
+                  style={[StyleSheet.absoluteFill, { borderRadius: 20 }]}
                 />
                 <LinearGradient
                   colors={["rgba(255,255,255,0.5)", "rgba(255,255,255,0)"]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 0, y: 0.5 }}
-                  style={StyleSheet.absoluteFill}
+                  style={[StyleSheet.absoluteFill, { borderRadius: 20 }]}
                 />
 
                 <TouchableOpacity activeOpacity={0.9} className="p-3">
@@ -474,13 +474,13 @@ export default function Home() {
               colors={["rgba(255,255,255,0.62)", "rgba(198,228,222,0.4)"]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
-              style={StyleSheet.absoluteFill}
+              style={[StyleSheet.absoluteFill, { borderRadius: 28 }]}
             />
             <LinearGradient
               colors={["rgba(255,255,255,0.5)", "rgba(255,255,255,0)"]}
               start={{ x: 0, y: 0 }}
               end={{ x: 0, y: 0.4 }}
-              style={StyleSheet.absoluteFill}
+              style={[StyleSheet.absoluteFill, { borderRadius: 28 }]}
             />
 
             <View className="px-4">
@@ -567,7 +567,7 @@ export default function Home() {
                 colors={["rgba(32,184,121,0.35)", "rgba(240,79,56,0.3)"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
-                style={StyleSheet.absoluteFill}
+                style={[StyleSheet.absoluteFill, { borderRadius: 36 }]}
               />
               <Ionicons name="person" size={30} color="#0B3D62" />
             </View>
@@ -662,13 +662,13 @@ export default function Home() {
               }
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
-              style={StyleSheet.absoluteFill}
+              style={[StyleSheet.absoluteFill, { borderRadius: 28 }]}
             />
             <LinearGradient
               colors={["rgba(255,255,255,0.5)", "rgba(255,255,255,0)"]}
               start={{ x: 0, y: 0 }}
               end={{ x: 0, y: 0.4 }}
-              style={StyleSheet.absoluteFill}
+              style={[StyleSheet.absoluteFill, { borderRadius: 28 }]}
             />
 
             <View className="px-4">
@@ -734,7 +734,7 @@ export default function Home() {
               colors={["rgba(255,255,255,0.65)", "rgba(214,206,245,0.45)"]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
-              style={StyleSheet.absoluteFill}
+              style={[StyleSheet.absoluteFill, { borderRadius: 24 }]}
             />
 
             <View className="flex-row items-center justify-between p-4">

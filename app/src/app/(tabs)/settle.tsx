@@ -63,13 +63,13 @@ function GlassLayers({ radius = 24 }: { radius?: number }) {
         colors={['rgba(255,255,255,0.62)', 'rgba(198,228,222,0.4)']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFill}
+        style={[StyleSheet.absoluteFill, { borderRadius: radius }]}
       />
       <LinearGradient
         colors={['rgba(255,255,255,0.5)', 'rgba(255,255,255,0)']}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 0.4 }}
-        style={StyleSheet.absoluteFill}
+        style={[StyleSheet.absoluteFill, { borderRadius: radius }]}
       />
     </>
   );
