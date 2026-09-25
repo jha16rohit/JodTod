@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -14,7 +14,6 @@ import {
 import { useRouter } from 'expo-router';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
-
 const { width } = Dimensions.get('window');
 
 const slides = [
@@ -69,14 +68,14 @@ export default function Onboarding() {
 
   const handleNext = () => {
     if (isLastSlide) {
-      router.push('/login');
+      router.push('/login' as any);
     } else {
       goToSlide(activeIndex + 1);
     }
   };
 
   const handleSkip = () => {
-    router.push('/login');
+    router.push('/login' as any);
   };
 
   return (

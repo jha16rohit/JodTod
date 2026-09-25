@@ -10,7 +10,7 @@ import Animated, {
 import { useRouter } from 'expo-router';
 import { Asset } from 'expo-asset';
 
-export default function AnimatedIntro() {
+export default function AnimatedIntro({ autoNavigate = true }: { autoNavigate?: boolean }) {
   const router = useRouter();
   const hasStarted = useRef(false);
 
@@ -98,8 +98,12 @@ export default function AnimatedIntro() {
     );
 
     // =========================================
-    // GO TO ONBOARDING
+    // GO TO ONBOARDING (only when self-navigating; the root index route
+    // passes autoNavigate={false} and decides based on auth state)
     // =========================================
+    if (!autoNavigate) {
+      return;
+    }
     const timeout = setTimeout(() => {
       router.replace('/onboarding');
     }, 3700);
@@ -107,7 +111,7 @@ export default function AnimatedIntro() {
     return () => {
       clearTimeout(timeout);
     };
-  }, [router]);
+  }, [router, autoNavigate]);
 
   // =========================================
   // ANIMATED STYLES
