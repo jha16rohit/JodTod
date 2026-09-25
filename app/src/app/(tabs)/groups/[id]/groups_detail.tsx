@@ -66,7 +66,7 @@ export default function GroupDetails() {
 
         {/* Overview card, overlapping the header like the reference */}
         <View style={{ marginTop: -28, paddingHorizontal: 20 }}>
-          <GlassCard style={{ backgroundColor: '#fff' }} className="rounded-[24px]">
+          <GlassCard className="rounded-[24px]">
             <View style={{ padding: 20 }}>
               <View className="flex-row items-center justify-between mb-1.5">
                 <Text className="text-xl font-extrabold" style={{ color: colors.textDark }}>
@@ -148,7 +148,7 @@ export default function GroupDetails() {
 
           {/* Quick links */}
           <View style={{ marginTop: 16 }}>
-            <GlassCard style={{ backgroundColor: '#fff' }}>
+            <GlassCard>
               <View style={{ paddingHorizontal: 16 }}>
                 <ActionRow icon="receipt-outline" label="Expenses" onPress={() => router.push(`${base}/expenses` as any)} />
                 <ActionRow icon="people-outline" label="Members" onPress={() => router.push(`${base}/members` as any)} />

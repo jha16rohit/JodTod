@@ -59,8 +59,10 @@ export function GlassCard({
 }) {
   return (
     <View className={`overflow-hidden border border-white/40 bg-white/30 ${className}`} style={style}>
-      <BlurView intensity={20} tint="light" className="absolute inset-0" />
-      <View className="bg-white/25">{children}</View>
+      {/* Explicit radius mirrors the card (default 24) so the veil can never
+          paint square corners if an ancestor fails to clip this native view. */}
+      <BlurView intensity={20} tint="light" className="absolute inset-0" style={{ borderRadius: 24 }} />
+      <View>{children}</View>
     </View>
   );
 }

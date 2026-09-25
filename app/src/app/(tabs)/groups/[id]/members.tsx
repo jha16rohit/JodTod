@@ -50,7 +50,7 @@ export default function GroupMembers() {
           </View>
         </TouchableOpacity>
 
-        <GlassCard style={{ backgroundColor: '#fff' }}>
+        <GlassCard>
           <View style={{ paddingHorizontal: 16 }}>
             {group.members.map((m, i) => (
               <View
