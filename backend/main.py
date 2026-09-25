@@ -26,6 +26,7 @@ from backend.routes.auth_email import router as auth_email_router
 from backend.routes.auth_password import router as auth_password_router
 from backend.routes.auth_refresh import router as auth_refresh_router
 from backend.routes.auth_oauth import router as auth_oauth_router
+from backend.routes.activities import router as activities_router
 from backend.routes.users import router as users_router
 from backend.services.auth_signup_service import (
     DuplicateAccountError,
@@ -149,6 +150,12 @@ app.include_router(
     users_router,
     prefix="/api",
     tags=["Users"],
+)
+
+app.include_router(
+    activities_router,
+    prefix="/api",
+    tags=["Activities"],
 )
 
 
