@@ -198,15 +198,24 @@ export function GradientCTA({
       style={{
         height: CTA_HEIGHT,
         borderRadius: radius,
-        backgroundColor: disabled ? '#A9C9BE' : colors.brand,
         gap: 8,
         paddingHorizontal: 18,
+        overflow: 'hidden',
         ...cardShadow,
         shadowColor: disabled ? 'transparent' : colors.brand,
         shadowOpacity: disabled ? 0 : 0.35,
         elevation: disabled ? 0 : 4,
+        backgroundColor: disabled ? '#A9C9BE' : 'transparent',
       }}
     >
+      {!disabled ? (
+        <LinearGradient
+          colors={[colors.brandLight, colors.brandDark]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={[StyleSheet.absoluteFill, { borderRadius: radius }]}
+        />
+      ) : null}
       <View className="flex-row items-center justify-center" style={{ gap: 8 }}>
         {children}
         {icon ? <Ionicons name={icon} size={17} color={disabled ? colors.textMuted : '#fff'} /> : null}
@@ -424,15 +433,25 @@ export function LabeledField({
 }: LabeledFieldProps) {
   return (
     <View style={{ marginBottom: 16 }}>
-      <Text className="text-[13px] mb-2 font-semibold" style={{ color: colors.textMuted }}>
+      <Text className="mb-2 font-bold" style={{ color: colors.textDark, fontSize: 14 }}>
         {label}
       </Text>
-      <GlassInput>
+      <GlassInput
+        style={{
+          borderWidth: 1.5,
+          borderColor: '#8FE3BB',
+          backgroundColor: 'rgba(255,255,255,0.08)',
+          position: 'relative',
+          overflow: 'hidden',
+        }}
+      >
         <View
-          className="flex-row px-3.5"
+          className="flex-row"
           style={{
             minHeight: multiline ? 90 : 52,
             alignItems: multiline ? 'flex-start' : 'center',
+            paddingLeft: 14,
+            paddingRight: 14,
           }}
         >
           {icon ? (
