@@ -31,9 +31,9 @@ function GlassCard({
     <View
       className={`overflow-hidden rounded-[28px] border border-white/40 bg-white/20 ${className}`}
     >
-      <BlurView intensity={20} tint="light" className="absolute inset-0" />
+      <BlurView intensity={20} tint="light" className="absolute inset-0" style={{ borderRadius: 28 }} />
 
-      <View className="bg-white/25">{children}</View>
+      <View>{children}</View>
     </View>
   );
 }

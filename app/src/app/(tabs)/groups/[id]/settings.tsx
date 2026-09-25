@@ -33,7 +33,7 @@ export default function GroupSettings() {
       <ScrollView className="flex-1 px-5" contentContainerStyle={{ paddingBottom: 60 }}>
         {/* Group summary strip */}
         <TouchableOpacity activeOpacity={0.85} onPress={() => router.push(`${base}/edit` as any)}>
-          <GlassCard style={{ backgroundColor: '#fff', marginBottom: 18 }}>
+          <GlassCard style={{ marginBottom: 18 }}>
             <View className="flex-row items-center justify-between px-4 py-4">
               <View className="flex-row items-center gap-3 flex-1">
                 <Avatar name={group.name} size={46} />
@@ -59,7 +59,7 @@ export default function GroupSettings() {
           </GlassCard>
         </TouchableOpacity>
 
-        <GlassCard style={{ backgroundColor: '#fff', marginBottom: 18 }}>
+        <GlassCard style={{ marginBottom: 18 }}>
           <View style={{ paddingHorizontal: 16 }}>
             <ActionRow icon="create-outline" label="Edit Group Details" onPress={() => router.push(`${base}/edit` as any)} />
             <ActionRow icon="people-outline" label="Manage Members" onPress={() => router.push(`${base}/members` as any)} />
@@ -72,7 +72,7 @@ export default function GroupSettings() {
           </View>
         </GlassCard>
 
-        <GlassCard style={{ backgroundColor: '#fff' }}>
+        <GlassCard>
           <View style={{ paddingHorizontal: 16 }}>
             <ActionRow icon="archive-outline" label="Archive Group" onPress={() => setSheet('archive')} />
             <View>

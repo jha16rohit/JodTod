@@ -64,7 +64,7 @@ export default function InviteMembers() {
           })}
         </View>
 
-        <GlassCard style={{ backgroundColor: '#fff' }}>
+        <GlassCard>
           <View className="items-center px-6 py-10">
             <View
               className="items-center justify-center rounded-full mb-5"
