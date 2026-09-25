@@ -16,6 +16,7 @@ from backend.config import settings
 from backend.models.base import Base
 
 # Import every model so SQLAlchemy metadata contains every table.
+from backend.models.activity import Activity
 from backend.models.user import User
 from backend.models.session import Session
 from backend.models.otp import OTP
