@@ -1,0 +1,1 @@
+{"nodes": [{"id": "api_health_service", "label": "fetchHealthCheck", "file_type": "code", "source_file": "app/src/services/api.ts", "source_location": null, "source_url": null, "captured_at": null, "author": null, "contributor": null}], "edges": [], "hyperedges": []}
