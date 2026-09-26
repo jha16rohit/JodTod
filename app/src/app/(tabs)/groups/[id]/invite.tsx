@@ -11,6 +11,7 @@ import {
   GradientCTA,
   colors,
 } from '@/components/groups/ui';
+import { InviteAppIcon } from '@/components/groups/InviteAppIcon';
 import { getGroup } from '@/lib/mockGroups';
 
 type Tab = 'link' | 'qr';
@@ -46,7 +47,7 @@ export default function InviteMembers() {
 
       <View className="px-5 pt-2">
         {/* Link / QR toggle */}
-        <View className="mb-6 rounded-2xl border border-white/40 bg-white/40 p-1 flex-row">
+        <View className="mb-6 rounded-2xl border border-white/40 bg-white/25 p-1 flex-row">
           {(['link', 'qr'] as Tab[]).map((t) => {
             const active = t === tab;
             return (
@@ -149,31 +150,5 @@ export default function InviteMembers() {
         </TouchableOpacity>
       </View>
     </BubbleBackdrop>
-  );
-}
-
-function InviteAppIcon({
-  icon,
-  label,
-  color,
-  onPress,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  color: string;
-  onPress: () => void;
-}) {
-  return (
-    <TouchableOpacity onPress={onPress} className="items-center flex-1">
-      <View
-        className="items-center justify-center rounded-2xl mb-1.5"
-        style={{ width: 52, height: 52, backgroundColor: 'rgba(255,255,255,0.6)', borderWidth: 1, borderColor: colors.inputBorder }}
-      >
-        <Ionicons name={icon} size={22} color={color} />
-      </View>
-      <Text className="text-[11px] font-semibold" style={{ color: colors.textMuted }}>
-        {label}
-      </Text>
-    </TouchableOpacity>
   );
 }

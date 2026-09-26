@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     api_version: str = "v1"
     host: str = "0.0.0.0"
     port: int = Field(
-        default=5000,
+        default=5001,
         ge=1,
         le=65535,
     )
