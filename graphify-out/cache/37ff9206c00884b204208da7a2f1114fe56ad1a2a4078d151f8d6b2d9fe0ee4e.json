@@ -1,1 +1,0 @@
-{"nodes": [{"id": "backend_config_settings", "label": "Pydantic Settings singleton (JWT, OTP, DB pool, OAuth, providers)", "file_type": "code", "source_file": "backend/config.py", "source_location": null, "source_url": null, "captured_at": null, "author": null, "contributor": null}], "edges": [], "hyperedges": []}

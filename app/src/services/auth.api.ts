@@ -195,13 +195,9 @@ function isRefreshPath(path: string): boolean {
  *
  * IMPORTANT:
  * The refresh endpoint does not receive an Authorization header.
- * It receives the refresh token in the request body, plus the stored
- * session_id when known (enables full rotation-reuse detection).
+ * It receives the refresh token in the request body.
  */
-async function performRefresh(
-  refreshToken: string,
-  sessionId?: string | null,
-): Promise<TokenResponse> {
+async function performRefresh(refreshToken: string): Promise<TokenResponse> {
   const controller = new AbortController();
 
   const timer = setTimeout(
@@ -210,9 +206,9 @@ async function performRefresh(
   );
 
   try {
-    const body: RefreshTokenRequest = sessionId
-      ? { refresh_token: refreshToken, session_id: sessionId }
-      : { refresh_token: refreshToken };
+    const body: RefreshTokenRequest = {
+      refresh_token: refreshToken,
+    };
 
     const response = await fetch(
       `${API_V1_BASE_URL}${AUTH_API_PATHS.REFRESH}`,
@@ -299,10 +295,9 @@ async function performRefresh(
  */
 export async function refreshTokensWithDedup(
   refreshToken: string,
-  sessionId?: string | null,
 ): Promise<TokenResponse> {
   if (!inFlightRefresh) {
-    inFlightRefresh = performRefresh(refreshToken, sessionId).finally(() => {
+    inFlightRefresh = performRefresh(refreshToken).finally(() => {
       inFlightRefresh = null;
     });
   }
@@ -310,20 +305,6 @@ export async function refreshTokensWithDedup(
   try {
     return await inFlightRefresh;
   } catch (error) {
-    /**
-     * Transient connectivity failures must NEVER wipe the persisted
-     * session. The stored refresh token is still valid — clearing it
-     * here would log the user out on every Metro/backend restart or
-     * network blip instead of restoring (or falling back offline).
-     * Only authentication failures invalidate the stored session.
-     */
-    if (
-      error instanceof AuthError &&
-      (error.code === "NETWORK_ERROR" || error.code === "TIMEOUT")
-    ) {
-      throw error;
-    }
-
     await clearAuthentication();
 
     if (error instanceof AuthError) {
@@ -424,7 +405,7 @@ async function authRequest<T>(
     const stored = await getAuthTokens();
 
     if (stored.refreshToken) {
-      await refreshTokensWithDedup(stored.refreshToken, stored.sessionId);
+      await refreshTokensWithDedup(stored.refreshToken);
 
       return authRequest<T>(path, {
         ...options,
@@ -569,11 +550,8 @@ export async function apiLoginWithGoogle(
 // Refresh
 // ---------------------------------------------------------------------------
 
-export async function apiRefresh(
-  refreshToken: string,
-  sessionId?: string | null,
-): Promise<TokenResponse> {
-  return refreshTokensWithDedup(refreshToken, sessionId);
+export async function apiRefresh(refreshToken: string): Promise<TokenResponse> {
+  return refreshTokensWithDedup(refreshToken);
 }
 
 // ---------------------------------------------------------------------------

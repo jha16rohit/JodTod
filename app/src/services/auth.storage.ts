@@ -4,12 +4,10 @@
  *
  * Rules enforced here:
  * - access token, refresh token, session ID → Expo SecureStore
- *   (AsyncStorage fallback under the SAME keys only where SecureStore
- *   is unavailable, e.g. Expo web — SecureStore is Android/iOS only)
  * - cached user (non-sensitive profile) → AsyncStorage
- * - never store passwords; never log token values
+ * - never log token values
  * - reads fail gracefully (return null); writes surface typed errors
- * - clearing is atomic-ish (all keys removed together, both stores)
+ * - clearing is atomic-ish (all keys removed together)
  */
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -47,85 +45,29 @@ export class AuthStorageError extends Error {
   }
 }
 
-/**
- * Whether the native SecureStore backend is usable on this platform.
- *
- * SecureStore is Android/iOS only. On Expo web (and any platform
- * without the native module) `isAvailableAsync()` resolves false and
- * every get/set would reject — without a fallback the session could
- * never be restored and the user would face Login on every reload.
- * The result is cached for the process lifetime: one platform, one
- * primary store.
- */
-let secureStoreAvailable: boolean | null = null;
-
-async function isSecureStoreAvailable(): Promise<boolean> {
-  if (secureStoreAvailable !== null) return secureStoreAvailable;
-  try {
-    secureStoreAvailable = await SecureStore.isAvailableAsync();
-  } catch {
-    secureStoreAvailable = false;
-  }
-  return secureStoreAvailable;
-}
-
 async function safeSecureGet(key: string): Promise<string | null> {
-  if (await isSecureStoreAvailable()) {
-    try {
-      const value = await SecureStore.getItemAsync(key);
-      if (value !== null) return value;
-    } catch {
-      // Fall through to the fallback slot below.
-    }
-    // A value may live in the fallback slot (written while SecureStore
-    // was unavailable). Check it before reporting "no session".
-    try {
-      return await AsyncStorage.getItem(key);
-    } catch {
-      return null;
-    }
-  }
   try {
-    return await AsyncStorage.getItem(key);
+    return await SecureStore.getItemAsync(key);
   } catch {
     return null;
   }
 }
 
 async function safeSecureSet(key: string, value: string): Promise<void> {
-  if (await isSecureStoreAvailable()) {
-    try {
-      await SecureStore.setItemAsync(key, value, {
-        keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
-      });
-      return;
-    } catch (error) {
-      throw new AuthStorageError(`Failed to persist authentication state.`);
-    }
-  }
-  // Fallback where SecureStore is unavailable (e.g. Expo web): persist
-  // under the SAME key so restore/logout keep working unchanged.
   try {
-    await AsyncStorage.setItem(key, value);
-  } catch {
+    await SecureStore.setItemAsync(key, value, {
+      keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+    });
+  } catch (error) {
     throw new AuthStorageError(`Failed to persist authentication state.`);
   }
 }
 
 async function safeSecureDelete(key: string): Promise<void> {
-  if (await isSecureStoreAvailable()) {
-    try {
-      await SecureStore.deleteItemAsync(key);
-    } catch {
-      // Missing key / platform quirk — treat as cleared.
-    }
-  }
-  // Always clear the fallback slot too, so logout/invalidation fully
-  // clears the session regardless of where the value was written.
   try {
-    await AsyncStorage.removeItem(key);
+    await SecureStore.deleteItemAsync(key);
   } catch {
-    // Treat as cleared.
+    // Missing key / platform quirk — treat as cleared.
   }
 }
 
@@ -234,20 +176,9 @@ export async function clearCachedUser(): Promise<void> {
 // Combined helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Remove every persisted auth artifact (tokens + cached user +
- * offline-session metadata).
- *
- * The offline timestamp MUST be cleared here: otherwise a logout (or an
- * invalid-session wipe) leaves stale "last online" metadata behind and
- * the persisted session is not fully cleared.
- */
+/** Remove every persisted auth artifact (tokens + cached user). */
 export async function clearAuthentication(): Promise<void> {
-  await Promise.all([
-    clearAuthTokens(),
-    clearCachedUser(),
-    clearLastOnlineAuthentication(),
-  ]);
+  await Promise.all([clearAuthTokens(), clearCachedUser()]);
 }
 
 /** True when a refresh token is persisted (session may be restorable). */
