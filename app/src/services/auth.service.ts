@@ -434,11 +434,6 @@ export async function loginWithGoogle(
 
 /**
  * Refresh the persisted authentication session.
- *
- * The stored session_id is forwarded so the backend can perform full
- * rotation-reuse detection. apiRefresh only clears persisted state on
- * authentication failures — transient network/timeout errors propagate
- * untouched so the valid session survives.
  */
 export async function refreshSession(): Promise<TokenResponse> {
   const stored = await getAuthTokens();
@@ -447,7 +442,7 @@ export async function refreshSession(): Promise<TokenResponse> {
     throw new AuthError("No saved session to refresh.", "SESSION_EXPIRED", 401);
   }
 
-  const tokens = await apiRefresh(stored.refreshToken, stored.sessionId);
+  const tokens = await apiRefresh(stored.refreshToken);
 
   /**
    * apiRefresh already persists the rotated
