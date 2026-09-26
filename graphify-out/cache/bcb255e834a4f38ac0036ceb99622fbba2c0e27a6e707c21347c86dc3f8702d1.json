@@ -1,1 +1,0 @@
-{"nodes": [{"id": "verify_email_screen", "label": "Pending-account channel verification", "file_type": "code", "source_file": "app/src/app/(auth)/verify-email.tsx", "source_location": null, "source_url": null, "captured_at": null, "author": null, "contributor": null}], "edges": [], "hyperedges": []}

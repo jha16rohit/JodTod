@@ -1,1 +1,0 @@
-{"nodes": [{"id": "test_imports_smoke_contract", "label": "import smoke contract", "file_type": "code", "source_file": "backend/tests/test_imports.py", "source_location": "L1-L130", "source_url": null, "captured_at": null, "author": null, "contributor": null}], "edges": [], "hyperedges": []}
