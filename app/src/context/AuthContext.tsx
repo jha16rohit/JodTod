@@ -27,6 +27,7 @@ import {
   isOnlineStatus,
   subscribeToNetworkChanges,
 } from "../services/network.service";
+import { AuthError } from "../types/auth.types";
 import type {
   AuthResponse,
   AuthStatus,
@@ -301,6 +302,18 @@ useEffect(() => {
       if (mountedRef.current && fresh) setUser(fresh);
     } catch (e) {
       if (!mountedRef.current) return;
+      // Transient connectivity failures must not sign the user out:
+      // the persisted session is still valid (the api layer no longer
+      // wipes it on NETWORK_ERROR/TIMEOUT), so keep the in-memory
+      // session and let the caller retry. Only authentication failures
+      // (expired/invalid/revoked tokens) clear the session.
+      if (
+        e instanceof AuthError &&
+        (e.code === "NETWORK_ERROR" || e.code === "TIMEOUT")
+      ) {
+        setError(e.message);
+        throw e;
+      }
       setUser(null);
       setSessionId(null);
       setError(e instanceof Error ? e.message : "Session refresh failed.");
