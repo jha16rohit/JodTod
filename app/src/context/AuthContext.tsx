@@ -27,6 +27,7 @@ import {
   isOnlineStatus,
   subscribeToNetworkChanges,
 } from "../services/network.service";
+import { AuthError } from "../types/auth.types";
 import type {
   AuthResponse,
   AuthStatus,
@@ -107,6 +108,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [bootstrapped, setBootstrapped] = useState(false);
   const mountedRef = useRef(true);
+  // Guard against StrictMode / navigation double-mount firing two
+  // concurrent restoreSession() calls.
+  const restoreInFlightRef = useRef<Promise<void> | null>(null);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -125,37 +129,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const restoreSession = useCallback(async () => {
-    if (mountedRef.current) {
-      setIsLoading(true);
-      setError(null);
+    // Share one in-flight bootstrap across concurrent callers.
+    if (restoreInFlightRef.current) {
+      return restoreInFlightRef.current;
     }
-    try {
-      const online = await isOnline().catch(() => true);
-      if (mountedRef.current) setIsOffline(!online);
-      const result = await AuthService.restoreSession({ online });
-      if (!mountedRef.current) return;
-      setUser(result.user);
-      if (result.user) {
-        await syncSessionId();
-      } else {
-        setSessionId(null);
-      }
-      if (result.offline) {
-        setIsOffline(true);
-      }
-      if (!result.restored && !result.offline && !result.user) {
+
+    const task = (async () => {
+      if (mountedRef.current) {
+        setIsLoading(true);
         setError(null);
       }
-    } catch (e) {
-      if (!mountedRef.current) return;
-      setUser(null);
-      setSessionId(null);
-      setError(e instanceof Error ? e.message : "Failed to restore session.");
-    } finally {
-      if (mountedRef.current) {
-        setBootstrapped(true);
-        setIsLoading(false);
+      try {
+        const online = await isOnline().catch(() => true);
+        if (mountedRef.current) setIsOffline(!online);
+        const result = await AuthService.restoreSession({ online });
+        if (!mountedRef.current) return;
+        setUser(result.user);
+        if (result.user) {
+          await syncSessionId();
+        } else {
+          setSessionId(null);
+        }
+        if (result.offline) {
+          setIsOffline(true);
+        }
+        if (!result.restored && !result.offline && !result.user) {
+          setError(null);
+        }
+      } catch (e) {
+        if (!mountedRef.current) return;
+        // Transient bundle-reload cancel: keep current user, stay neutral.
+        if (e instanceof AuthError && e.code === "REQUEST_CANCELLED") {
+          return;
+        }
+        setUser(null);
+        setSessionId(null);
+        setError(e instanceof Error ? e.message : "Failed to restore session.");
+      } finally {
+        if (mountedRef.current) {
+          setBootstrapped(true);
+          setIsLoading(false);
+        }
       }
+    })();
+
+    restoreInFlightRef.current = task;
+    try {
+      await task;
+    } finally {
+      restoreInFlightRef.current = null;
     }
   }, [syncSessionId]);
 

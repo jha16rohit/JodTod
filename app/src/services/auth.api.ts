@@ -181,6 +181,50 @@ async function parseJsonSafe(response: Response): Promise<unknown> {
 }
 
 // ---------------------------------------------------------------------------
+// Canceled-request detection
+// ---------------------------------------------------------------------------
+
+/**
+ * True when a fetch was canceled rather than failed.
+ *
+ * During cold start / Metro reload on Android, React Native cancels
+ * in-flight bootstrap fetches. Hermes surfaces this as a generic
+ * `Error: fetch failed: Fetch request has been canceled` — NOT a DOM
+ * `AbortError` — so both shapes must be detected.
+ *
+ * NOTE: our own timeout `AbortController.abort()` also produces an
+ * abort-shaped error. Callers track a `timedOut` flag and check it FIRST
+ * so a genuine timeout still maps to TIMEOUT, not REQUEST_CANCELLED.
+ */
+export function isRequestCanceled(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const name = (error as { name?: unknown }).name;
+
+  if (typeof name === "string" && name === "AbortError") {
+    return true;
+  }
+
+  const message = (error as { message?: unknown }).message;
+
+  if (typeof message === "string") {
+    const lower = message.toLowerCase();
+
+    if (
+      lower.includes("canceled") ||
+      lower.includes("cancelled") ||
+      lower.includes("aborted")
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+// ---------------------------------------------------------------------------
 // Refresh handling
 // ---------------------------------------------------------------------------
 
@@ -199,11 +243,12 @@ function isRefreshPath(path: string): boolean {
  */
 async function performRefresh(refreshToken: string): Promise<TokenResponse> {
   const controller = new AbortController();
+  let timedOut = false;
 
-  const timer = setTimeout(
-    () => controller.abort(),
-    AUTH_TIMEOUTS.REFRESH_TIMEOUT_MS,
-  );
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, AUTH_TIMEOUTS.REFRESH_TIMEOUT_MS);
 
   try {
     const body: RefreshTokenRequest = {
@@ -274,8 +319,23 @@ async function performRefresh(refreshToken: string): Promise<TokenResponse> {
       throw error;
     }
 
-    if (error instanceof DOMException && error.name === "AbortError") {
+    if (
+      timedOut ||
+      (error instanceof DOMException && error.name === "AbortError")
+    ) {
       throw new AuthError("Session refresh timed out.", "TIMEOUT");
+    }
+
+    if (isRequestCanceled(error)) {
+      if (__DEV__) {
+        console.warn(
+          "[auth.api] refresh request canceled (bundle reload?), ignoring.",
+        );
+      }
+      throw new AuthError(
+        "The request was canceled. Please try again.",
+        "REQUEST_CANCELLED",
+      );
     }
 
     throw new AuthError(
@@ -305,6 +365,11 @@ export async function refreshTokensWithDedup(
   try {
     return await inFlightRefresh;
   } catch (error) {
+    // Transient bundle-reload cancelation must not wipe the stored session.
+    if (error instanceof AuthError && error.code === "REQUEST_CANCELLED") {
+      throw error;
+    }
+
     await clearAuthentication();
 
     if (error instanceof AuthError) {
@@ -344,9 +409,13 @@ async function authRequest<T>(
   } = options;
 
   const controller = new AbortController();
+  let timedOut = false;
 
   const timer = setTimeout(
-    () => controller.abort(),
+    () => {
+      timedOut = true;
+      controller.abort();
+    },
     timeoutMs ?? AUTH_TIMEOUTS.REQUEST_TIMEOUT_MS,
   );
 
@@ -376,13 +445,31 @@ async function authRequest<T>(
       signal: controller.signal,
     });
   } catch (error) {
-    console.error('Auth API Network Error:', error);
-    if (error instanceof DOMException && error.name === "AbortError") {
+    if (
+      timedOut ||
+      (error instanceof DOMException && error.name === "AbortError")
+    ) {
       throw new AuthError(
         "The request timed out. Please try again.",
         "TIMEOUT",
       );
     }
+
+    if (isRequestCanceled(error)) {
+      if (__DEV__) {
+        console.warn(
+          "[auth.api] request canceled (bundle reload?), ignoring.",
+        );
+      } else {
+        console.warn("[auth.api] request canceled.");
+      }
+      throw new AuthError(
+        "The request was canceled. Please try again.",
+        "REQUEST_CANCELLED",
+      );
+    }
+
+    console.error('Auth API Network Error:', error);
 
     throw new AuthError(
       "Could not reach the authentication server. Check your connection and that the backend is running.",

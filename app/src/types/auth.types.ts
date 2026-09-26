@@ -251,6 +251,7 @@ export interface NetworkStatus {
 
 export type AuthErrorCode =
   | "NETWORK_ERROR"
+  | "REQUEST_CANCELLED"
   | "TIMEOUT"
   | "INVALID_CREDENTIALS"
   | "VALIDATION_ERROR"
