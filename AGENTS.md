@@ -54,7 +54,7 @@ Mental model — mobile shell → auth gate → API → service-per-flow → Pos
 - 2026-09-26 — Groups UI (list/create/join/detail/expenses/members/settings/invite/edit + shared components, still on `mockGroups`) — `app/src/app/(tabs)/groups/`, `app/src/components/groups/`
 - 2026-09-26 — Login system update + form UI (AuthContext single-truth, offline indicator, storage) — `app/src/context/AuthContext.tsx`, `app/src/services/auth.*`, `components/auth/`
 - 2026-09-27 — Home page update — `app/src/app/(tabs)/index.tsx`, `app/src/app/index.tsx`
-- 2026-09-27 — Knowledge graph + this memory file — `graph.html`, `graph.json`, `GRAPH_REPORT.md`, `AGENTS.md` (also in `graphify-out/`)
+- 2026-09-27 — Knowledge graph + this memory file — `graphify-out/graph.html`, `graphify-out/graph.json`, `graphify-out/GRAPH_REPORT.md`, `AGENTS.md`
 
 ## 6. Known issues / open TODOs
 
@@ -78,7 +78,7 @@ Mental model — mobile shell → auth gate → API → service-per-flow → Pos
 
 ## 8. Graph reference
 
-`graph.html` / `graph.json` (+ `GRAPH_REPORT.md`, canonical copies in `graphify-out/`) are the queryable map — consult them instead of re-scanning for "which functions call X", "what bridges auth ↔ activity", or cross-community impact; use `graphify query|path|explain` (e.g. `graphify query "how does refresh rotation work"`).
+`graphify-out/graph.html` / `graphify-out/graph.json` (+ `graphify-out/GRAPH_REPORT.md`) are the queryable map — consult them instead of re-scanning for "which functions call X", "what bridges auth ↔ activity", or cross-community impact; use `graphify query|path|explain` (e.g. `graphify query "how does refresh rotation work"`). Graph files live only in `graphify-out/` (not the repo root).
 
 ---
 *Sync rule: after any feature/architecture change, re-run Graphify (`graphify update .` for code-only, full `/graphify .` for docs/images, or `graphify hook install` for auto git-hook rebuilds) and update §5 + §7 here so narrative never drifts from graph/code.*
