@@ -72,6 +72,12 @@ export interface LoginRequest {
 
 export interface RefreshTokenRequest {
   refresh_token: string;
+  /**
+   * Stored session identity. Optional but recommended: supplying it
+   * enables full rotation-reuse detection on the backend
+   * (mirrors backend/schemas/auth.py RefreshTokenRequest).
+   */
+  session_id?: string | null;
 }
 
 export interface LogoutRequest {
