@@ -7,6 +7,15 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class CreateInvitationRequest(BaseModel):
+    """Request to create a group invitation."""
+
+    invitee_user_id: UUID
+    group_name: str = Field(min_length=1, max_length=120)
+    invite_code: str = Field(min_length=1, max_length=64)
+    invited_by: Optional[str] = Field(default=None, max_length=120)
+
+
 class GroupInvitationResponse(BaseModel):
     """One invitation addressed to the authenticated user."""
 

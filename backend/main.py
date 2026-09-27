@@ -36,6 +36,7 @@ from backend.routes.users import router as users_router
 from backend.routes.preferences import router as preferences_router
 from backend.routes.linked_accounts import router as linked_accounts_router
 from backend.routes.invitations import router as invitations_router
+from backend.routes.notifications import router as notifications_router
 from backend.routes.support import router as support_router
 from backend.services.auth_signup_service import (
     DuplicateAccountError,
@@ -208,6 +209,12 @@ app.include_router(
     activities_router,
     prefix="/api",
     tags=["Activities"],
+)
+
+app.include_router(
+    notifications_router,
+    prefix="/api",
+    tags=["Notifications"],
 )
 
 app.include_router(

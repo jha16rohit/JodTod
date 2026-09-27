@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, Share, Platform, ToastAndroid, Alert, ActivityIndicator } from 'react-native';
-import { useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useState } from 'react';
+import { View, Text, TouchableOpacity, Share, Platform, ToastAndroid, Alert } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
+import QRCode from 'react-native-qrcode-svg';
 
 import {
   BubbleBackdrop,
@@ -13,70 +14,60 @@ import {
 } from '@/components/groups/ui';
 import { InviteAppIcon } from '@/components/groups/InviteAppIcon';
 import {
-  fetchGroupDetail,
-  rotateInviteCode,
-  type GroupDetail,
-} from '@/services/groups.api';
+  addMemberToGroup,
+  buildJoinLink,
+  getPeople,
+  memberStatus,
+  regenerateGroupJoinToken,
+  useGroups,
+} from '@/lib/mockGroups';
 
 type Tab = 'link' | 'qr';
 
 export default function InviteMembers() {
+  const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const groupId = Array.isArray(id) ? id[0] : (id as string);
+  const allGroups = useGroups();
+  const group = allGroups.find((g) => g.id === (id as string));
   const [tab, setTab] = useState<Tab>('link');
   const [copied, setCopied] = useState(false);
-  const [detail, setDetail] = useState<GroupDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [rotating, setRotating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [showExisting, setShowExisting] = useState(false);
+  const [memberNotice, setMemberNotice] = useState<string | null>(null);
 
-  const mountedRef = useRef(true);
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
+  if (!group) {
+    return (
+      <BubbleBackdrop>
+        <ScreenHeader title="Invite" />
+        <View className="flex-1 items-center justify-center px-5">
+          <Text className="text-sm" style={{ color: colors.textMuted }}>
+            Group not found.
+          </Text>
+        </View>
+      </BubbleBackdrop>
+    );
+  }
 
-  const load = useCallback(async () => {
-    if (!groupId) {
-      setError('Group not found.');
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      const group = await fetchGroupDetail(groupId);
-      if (!mountedRef.current) return;
-      if (!group) {
-        setError('Group not found.');
-        setDetail(null);
-      } else {
-        setDetail(group);
-      }
-    } catch (e) {
-      if (!mountedRef.current) return;
-      setError(e instanceof Error ? e.message : 'Could not load invite.');
-      setDetail(null);
-    } finally {
-      if (mountedRef.current) setLoading(false);
-    }
-  }, [groupId]);
+  const inviteLink = buildJoinLink(group.id);
 
-  useFocusEffect(
-    useCallback(() => {
-      mountedRef.current = true;
-      void load();
-      return () => {
-        mountedRef.current = false;
-      };
-    }, [load]),
-  );
+  const candidates = getPeople().filter((p) => {
+    const email = (p.email ?? '').trim().toLowerCase();
+    return !group.members.some(
+      (m) =>
+        m.personId === p.id ||
+        (email && m.email && m.email.trim().toLowerCase() === email) ||
+        m.name.trim().toLowerCase() === p.name.trim().toLowerCase(),
+    );
+  });
 
-  const inviteLink = detail?.invite_code
-    ? `https://jodtod.app/join/${detail.invite_code}`
-    : '';
+  const addExisting = (personId: string) => {
+    const res = addMemberToGroup(group.id, personId, 'Rohit');
+    const person = getPeople().find((p) => p.id === personId);
+    setMemberNotice(
+      res.isNew
+        ? `${person?.name ?? 'Member'} added (${memberStatus(res.member)})`
+        : `${person?.name ?? 'Member'} is already in ${group.name}`,
+    );
+  };
 
   const copyLink = async () => {
     if (!inviteLink) return;
@@ -87,174 +78,191 @@ export default function InviteMembers() {
   };
 
   const shareLink = async () => {
-    if (!detail || !inviteLink) return;
     try {
-      await Share.share({ message: `Join my group "${detail.name}" on JodTod: ${inviteLink}` });
+      await Share.share({ message: `Join my group "${group.name}" on JodTod: ${inviteLink}` });
     } catch (e) {
       Alert.alert('Could not share link');
     }
   };
 
-  const regenerate = useCallback(async () => {
-    if (!groupId || rotating) return;
-    setRotating(true);
-    try {
-      const code = await rotateInviteCode(groupId);
-      if (!mountedRef.current) return;
-      if (code) {
-        setDetail((prev) => (prev ? { ...prev, invite_code: code } : prev));
-      }
-    } catch (e) {
-      if (mountedRef.current) {
-        Alert.alert(
-          'Could not regenerate',
-          e instanceof Error ? e.message : 'Please try again.',
-        );
-      }
-    } finally {
-      if (mountedRef.current) setRotating(false);
-    }
-  }, [groupId, rotating]);
+  const regenerate = () => {
+    regenerateGroupJoinToken(group.id);
+    setCopied(false);
+  };
 
   return (
     <BubbleBackdrop>
-      <ScreenHeader title={detail ? `Invite to ${detail.name}` : 'Invite'} />
+      <ScreenHeader title={`Invite to ${group.name}`} />
 
       <View className="px-5 pt-2">
-        {loading ? (
-          <View className="items-center py-16">
-            <ActivityIndicator size="small" color={colors.textDark} />
-          </View>
-        ) : error || !detail || !inviteLink ? (
-          <View className="items-center py-16">
-            <Text className="text-sm" style={{ color: colors.textMuted }}>
-              {error ?? 'Invite is unavailable for this group.'}
-            </Text>
-            <TouchableOpacity
-              onPress={() => void load()}
-              activeOpacity={0.7}
-              className="mt-4 rounded-full px-5 py-2.5"
-              style={{ backgroundColor: colors.brandDark }}
+        <View className="mb-6 rounded-2xl border border-white/40 bg-white/25 p-1 flex-row">
+          {(['link', 'qr'] as Tab[]).map((t) => {
+            const active = t === tab;
+            return (
+              <TouchableOpacity
+                key={t}
+                onPress={() => setTab(t)}
+                className="flex-1 h-10 items-center justify-center rounded-xl"
+                style={{ backgroundColor: active ? colors.brand : 'transparent' }}
+              >
+                <Text className="text-sm font-bold" style={{ color: active ? '#fff' : colors.textMuted }}>
+                  {t === 'link' ? 'Share Link' : 'QR Code'}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <GlassCard>
+          <View className="items-center px-6 py-10">
+            <View
+              className="items-center justify-center rounded-full mb-5"
+              style={{ width: 90, height: 90, backgroundColor: colors.successBg }}
             >
-              <Text className="text-[13px] font-bold text-white">Retry</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <>
-            {/* Link / QR toggle */}
-            <View className="mb-6 rounded-2xl border border-white/40 bg-white/25 p-1 flex-row">
-              {(['link', 'qr'] as Tab[]).map((t) => {
-                const active = t === tab;
-                return (
-                  <TouchableOpacity
-                    key={t}
-                    onPress={() => setTab(t)}
-                    className="flex-1 h-10 items-center justify-center rounded-xl"
-                    style={{ backgroundColor: active ? colors.brand : 'transparent' }}
-                  >
-                    <Text className="text-sm font-bold" style={{ color: active ? '#fff' : colors.textMuted }}>
-                      {t === 'link' ? 'Share Link' : 'QR Code'}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
+              <Ionicons name={tab === 'link' ? 'link' : 'qr-code-outline'} size={38} color={colors.brandDark} />
             </View>
 
-            <GlassCard>
-              <View className="items-center px-6 py-10">
+            {tab === 'link' ? (
+              <>
+                <Text className="text-base font-bold mb-1.5" style={{ color: colors.textDark }}>
+                  Share Invite Link
+                </Text>
+                <Text className="text-[12.5px] text-center mb-5" style={{ color: colors.textMuted }}>
+                  Anyone with this link can join this group.
+                </Text>
+
                 <View
-                  className="items-center justify-center rounded-full mb-5"
-                  style={{ width: 90, height: 90, backgroundColor: colors.successBg }}
+                  className="flex-row items-center justify-between w-full rounded-2xl border border-white/50 px-4 py-3 mb-5"
+                  style={{ backgroundColor: colors.neutralBg }}
                 >
-                  <Ionicons name={tab === 'link' ? 'link' : 'qr-code-outline'} size={38} color={colors.brandDark} />
+                  <Text className="text-[13px] flex-1" style={{ color: colors.textDark }} numberOfLines={1}>
+                    {inviteLink}
+                  </Text>
+                  <TouchableOpacity onPress={copyLink} className="ml-2">
+                    <Ionicons name={copied ? 'checkmark' : 'copy-outline'} size={18} color={colors.brandDark} />
+                  </TouchableOpacity>
                 </View>
 
-                {tab === 'link' ? (
-                  <>
-                    <Text className="text-base font-bold mb-1.5" style={{ color: colors.textDark }}>
-                      Share Invite Link
-                    </Text>
-                    <Text className="text-[12.5px] text-center mb-5" style={{ color: colors.textMuted }}>
-                      Anyone with this link can join this group.
-                    </Text>
+                <View style={{ width: '100%' }}>
+                  <GradientCTA icon="share-social-outline" onPress={shareLink}>
+                    <Text className="text-white text-[14px] font-bold">Share Link</Text>
+                  </GradientCTA>
+                </View>
+              </>
+            ) : (
+              <>
+                <Text className="text-base font-bold mb-1.5" style={{ color: colors.textDark }}>
+                  Scan to Join
+                </Text>
+                <Text className="text-[12.5px] text-center mb-5" style={{ color: colors.textMuted }}>
+                  Ask friends to scan this QR code with their camera.
+                </Text>
 
-                    <View
-                      className="flex-row items-center justify-between w-full rounded-2xl border border-white/50 px-4 py-3 mb-5"
-                      style={{ backgroundColor: colors.neutralBg }}
-                    >
-                      <Text className="text-[13px] flex-1" style={{ color: colors.textDark }} numberOfLines={1}>
-                        {inviteLink}
-                      </Text>
-                      <TouchableOpacity onPress={copyLink} className="ml-2">
-                        <Ionicons name={copied ? 'checkmark' : 'copy-outline'} size={18} color={colors.brandDark} />
-                      </TouchableOpacity>
-                    </View>
+                <View
+                  className="items-center justify-center rounded-2xl mb-5 bg-white p-3"
+                  style={{ width: 204, height: 204 }}
+                >
+                  <QRCode
+                    value={inviteLink}
+                    size={180}
+                    backgroundColor="#FFFFFF"
+                    color="#0B3D62"
+                  />
+                </View>
 
-                    <View style={{ width: '100%' }}>
-                      <GradientCTA icon="share-social-outline" onPress={shareLink}>
-                        <Text className="text-white text-[14px] font-bold">Share Link</Text>
-                      </GradientCTA>
-                    </View>
-                  </>
-                ) : (
-                  <>
-                    <Text className="text-base font-bold mb-1.5" style={{ color: colors.textDark }}>
-                      Scan to Join
-                    </Text>
-                    <Text className="text-[12.5px] text-center mb-5" style={{ color: colors.textMuted }}>
-                      Ask friends to scan this QR code with their camera.
-                    </Text>
+                <View style={{ width: '100%' }}>
+                  <GradientCTA icon="download-outline" onPress={() => {}}>
+                    <Text className="text-white text-[14px] font-bold">Save QR Code</Text>
+                  </GradientCTA>
+                </View>
+              </>
+            )}
+          </View>
+        </GlassCard>
 
-                    {/* Placeholder QR block — swap for a real QR (e.g. react-native-qrcode-svg) */}
-                    <View
-                      className="items-center justify-center rounded-2xl mb-5"
-                      style={{ width: 180, height: 180, backgroundColor: colors.neutralBg }}
-                    >
-                      <Ionicons name="qr-code" size={110} color={colors.textDark} />
-                    </View>
+        <Text className="text-[13px] font-semibold mt-6 mb-3" style={{ color: colors.textMuted }}>
+          Invite via...
+        </Text>
+        <View className="flex-row gap-4">
+          <InviteAppIcon icon="logo-whatsapp" label="WhatsApp" color="#25D366" onPress={shareLink} />
+          <InviteAppIcon icon="link-outline" label="Copy Link" color={colors.brandDark} onPress={copyLink} />
+          <InviteAppIcon icon="mail-outline" label="Gmail" color="#EA4335" onPress={shareLink} />
+          <InviteAppIcon icon="ellipsis-horizontal" label="More" color={colors.textMuted} onPress={shareLink} />
+        </View>
 
-                    <View style={{ width: '100%' }}>
-                      <GradientCTA icon="download-outline" onPress={() => {}}>
-                        <Text className="text-white text-[14px] font-bold">Save QR Code</Text>
-                      </GradientCTA>
-                    </View>
-                  </>
-                )}
-              </View>
-            </GlassCard>
-
-            {/* Invite via apps */}
-            <Text className="text-[13px] font-semibold mt-6 mb-3" style={{ color: colors.textMuted }}>
-              Invite via...
-            </Text>
-            <View className="flex-row gap-4">
-              <InviteAppIcon icon="logo-whatsapp" label="WhatsApp" color="#25D366" onPress={shareLink} />
-              <InviteAppIcon icon="link-outline" label="Copy Link" color={colors.brandDark} onPress={copyLink} />
-              <InviteAppIcon icon="mail-outline" label="Gmail" color="#EA4335" onPress={shareLink} />
-              <InviteAppIcon icon="ellipsis-horizontal" label="More" color={colors.textMuted} onPress={shareLink} />
-            </View>
-
-            <Text className="text-[12px] text-center mt-6" style={{ color: colors.textMuted }}>
-              You can also generate a new link anytime if you want to invalidate the current one.
-            </Text>
-            <TouchableOpacity
-              className="items-center mt-2 flex-row justify-center gap-1.5"
-              disabled={rotating}
-              onPress={() => void regenerate()}
-            >
-              {rotating ? (
-                <ActivityIndicator size="small" color={colors.brandDark} />
-              ) : (
-                <>
-                  <Ionicons name="refresh" size={14} color={colors.brandDark} />
-                  <Text className="text-[12.5px] font-bold" style={{ color: colors.brandDark }}>
-                    Generate New Link
-                  </Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </>
+        {memberNotice && (
+          <Text className="text-[12.5px] text-center mt-6 font-bold" style={{ color: colors.brandDark }}>
+            {memberNotice}
+          </Text>
         )}
+
+        <Text className="text-[13px] font-semibold mt-6 mb-3" style={{ color: colors.textMuted }}>
+          Add members directly
+        </Text>
+        <View className="flex-row gap-3">
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => setShowExisting((v) => !v)}
+            className="flex-1 rounded-2xl border border-white/50 bg-white/25 px-3 py-3 items-center"
+          >
+            <Text className="text-[13px] font-bold" style={{ color: colors.textDark }}>
+              Add Existing Member
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => router.push(`/add-member?groupId=${group.id}` as any)}
+            className="flex-1 rounded-2xl border border-white/50 bg-white/25 px-3 py-3 items-center"
+          >
+            <Text className="text-[13px] font-bold" style={{ color: colors.textDark }}>
+              Add New Member
+            </Text>
+          </TouchableOpacity>
+        </View>
+        {showExisting && (
+          <View className="mt-3">
+            {candidates.length === 0 ? (
+              <Text className="text-[12.5px]" style={{ color: colors.textMuted }}>
+                Everyone you know is already in this group.
+              </Text>
+            ) : (
+              candidates.map((p) => (
+                <TouchableOpacity
+                  key={p.id}
+                  activeOpacity={0.8}
+                  onPress={() => addExisting(p.id)}
+                  className="flex-row items-center rounded-2xl border border-white/50 bg-white/25 px-3 py-2.5 mb-2"
+                >
+                  <View
+                    className="items-center justify-center rounded-full mr-2.5"
+                    style={{ width: 34, height: 34, backgroundColor: colors.successBg }}
+                  >
+                    <Text className="text-[14px] font-extrabold" style={{ color: colors.brandDark }}>
+                      {p.name.trim().charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                  <Text className="flex-1 text-[14px] font-bold" style={{ color: colors.textDark }} numberOfLines={1}>
+                    {p.name}
+                  </Text>
+                  <Ionicons name="person-add-outline" size={17} color={colors.brandDark} />
+                </TouchableOpacity>
+              ))
+            )}
+          </View>
+        )}
+
+        <Text className="text-[12px] text-center mt-6" style={{ color: colors.textMuted }}>
+          You can also generate a new link anytime if you want to invalidate the current one.
+        </Text>
+        <TouchableOpacity
+          className="items-center mt-2 flex-row justify-center gap-1.5"
+          onPress={regenerate}
+        >
+          <Ionicons name="refresh" size={14} color={colors.brandDark} />
+          <Text className="text-[12.5px] font-bold" style={{ color: colors.brandDark }}>
+            Generate New Link
+          </Text>
+        </TouchableOpacity>
       </View>
     </BubbleBackdrop>
   );

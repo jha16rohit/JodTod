@@ -49,6 +49,7 @@ from backend.services.group_service import (
     GroupNotFoundError,
     GroupService,
 )
+from backend.services.notification_service import NotificationService
 
 
 class SettlementNotFoundError(Exception):
@@ -256,6 +257,28 @@ class SettlementService:
             row.status = SettlementStatus.PAID
             row.confirmed_at = _utcnow()
             await db.flush()
+
+            # Create notification for the payer that settlement was confirmed
+            payer = await db.get(User, row.payer_user_id)
+            receiver = await db.get(User, row.receiver_user_id)
+            group = await db.get(Group, row.group_id)
+            await NotificationService.wire_settlement_confirmed(
+                db=db,
+                user_id=row.payer_user_id,
+                group_id=row.group_id,
+                settlement_amount=money(row.amount),
+                payer_name=payer.name if payer and payer.name else "You",
+                receiver_name=receiver.name if receiver and receiver.name else "Member",
+                context_data={
+                    "settlement_id": str(row.id),
+                    "amount": money(row.amount),
+                    "currency": row.currency,
+                    "payer_name": payer.name if payer and payer.name else "You",
+                    "receiver_name": receiver.name if receiver and receiver.name else "Member",
+                    "group_name": group.name if group else "Group",
+                    "confirmed_at": row.confirmed_at.isoformat() if row.confirmed_at else None,
+                },
+            )
         return row
 
     @staticmethod

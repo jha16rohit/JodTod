@@ -1,7 +1,7 @@
 import { Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Avatar, colors } from './ui';
-import type { Member } from '@/lib/mockGroups';
+import { memberStatus, type Member } from '@/lib/mockGroups';
 
 export function RoleBadge({ role }: { role: Member['role'] }) {
   const isAdmin = role === 'Admin';
@@ -37,6 +37,13 @@ export function MemberRow({ member: m, isLast, onMenuPress }: MemberRowProps) {
               {m.name} {m.isYou ? '(You)' : ''}
             </Text>
             <RoleBadge role={m.role} />
+            {memberStatus(m) === 'pending' && (
+              <View className="px-2 py-0.5 rounded-full" style={{ backgroundColor: '#FEF3C7' }}>
+                <Text className="text-[10px] font-bold" style={{ color: '#B45309' }}>
+                  Pending
+                </Text>
+              </View>
+            )}
           </View>
           <Text className="text-[12px]" style={{ color: colors.textMuted }} numberOfLines={1}>
             {m.email}

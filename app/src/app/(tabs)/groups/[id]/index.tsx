@@ -144,10 +144,8 @@ export default function GroupDetails() {
     );
   }
 
-  const myId = user?.id ?? null;
   const myNet = Number(detail.my_net);
   const base = `/(tabs)/groups/${detail.id}`;
-  void myId;
   const stackMembers = detail.members.map((m) => ({
     id: m.user_id,
     name: m.display_name,
@@ -158,7 +156,6 @@ export default function GroupDetails() {
     <View className="flex-1">
       <ScreenBackground />
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}>
-        {/* Cover header — group image when set, identity block otherwise */}
         <View style={{ width: SCREEN_W, height: 220, backgroundColor: 'rgba(255,255,255,0.25)' }}>
           <View className="absolute inset-0" style={{ backgroundColor: 'rgba(11,61,98,0.15)' }} pointerEvents="none" />
           <View className="absolute inset-0 items-center justify-center">
@@ -186,7 +183,6 @@ export default function GroupDetails() {
           </View>
         </View>
 
-        {/* Overview card, starting below the cover so the full photo stays visible */}
         <View style={{ marginTop: 14, paddingHorizontal: 20 }}>
           <GlassCard className="rounded-[24px]">
             <View style={{ padding: 20 }}>
@@ -203,7 +199,6 @@ export default function GroupDetails() {
                 </Text>
               ) : null}
 
-              {/* Member avatars */}
               <TouchableOpacity
                 className="flex-row items-center"
                 onPress={() => router.push(`${base}/members` as any)}
@@ -216,7 +211,6 @@ export default function GroupDetails() {
             </View>
           </GlassCard>
 
-          {/* Balance boxes — standalone below the card, no box-in-box */}
           <View style={{ marginTop: 12 }}>
             <BalanceSummary
               youAreOwed={myNet > 0 ? myNet : 0}
@@ -226,12 +220,12 @@ export default function GroupDetails() {
             />
           </View>
 
-          {/* Quick links */}
           <View style={{ marginTop: 16 }}>
             <GlassCard>
               <View style={{ paddingHorizontal: 16 }}>
                 <ActionRow icon="receipt-outline" label="Expenses" onPress={() => router.push(`${base}/expenses` as any)} />
                 <ActionRow icon="people-outline" label="Members" onPress={() => router.push(`${base}/members` as any)} />
+                <ActionRow icon="person-add-outline" label="Invite Members" onPress={() => router.push(`${base}/invite` as any)} />
                 <ActionRow icon="cash-outline" label="Settle Up" onPress={() => router.push({ pathname: '/(tabs)/settle', params: { groupId: detail.id } } as any)} />
                 <ActionRow icon="time-outline" label="Settlement History" onPress={() => router.push({ pathname: '/(tabs)/settle', params: { groupId: detail.id } } as any)} />
                 <View className="border-b-0">

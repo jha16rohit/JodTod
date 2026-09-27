@@ -55,9 +55,6 @@ export default function CreateGroup() {
           contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Create Group button sits right after the last field instead
-              of being pinned to the bottom of a tall screen, so it reads as
-              part of the form on every phone size. */}
           <GroupForm
             submitLabel={submitting ? "Creating…" : "Create Group"}
             showCover="picker"

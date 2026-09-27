@@ -79,7 +79,6 @@ export default function GroupsList() {
     }
   }, []);
 
-  // Single focus-driven load (focus fires on mount too — no double fetch).
   useFocusEffect(
     useCallback(() => {
       mountedRef.current = true;
@@ -100,11 +99,7 @@ export default function GroupsList() {
 
   return (
     <BubbleBackdrop>
-      {/* paddingTop uses the device safe-area inset + a little extra, so the
-          "+" button always sits clear of the notch/status bar instead of
-          being pinned to the very top edge on tall Android phones. */}
       <View className="flex-1 px-5" style={{ paddingTop: insets.top + 14 }}>
-        {/* Header — + button only, right aligned */}
         <View className="flex-row items-center justify-end mb-4">
           <TouchableOpacity
             onPress={() => router.push('/(tabs)/groups/create' as any)}
@@ -156,7 +151,6 @@ export default function GroupsList() {
           <>
             {groups.length > 0 && (
               <>
-                {/* Search */}
                 <View className="mb-3 rounded-full" style={[cardShadow, { backgroundColor: 'rgba(255,255,255,0.01)' }]}>
                   <View className="h-12 flex-row items-center overflow-hidden rounded-full border border-white/70 px-4">
                     <GlassLayers radius={24} />
@@ -173,7 +167,6 @@ export default function GroupsList() {
                   </View>
                 </View>
 
-                {/* Filter tabs */}
                 <FilterTabs tabs={TABS} value={tab} onChange={setTab} />
               </>
             )}

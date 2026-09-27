@@ -19,6 +19,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.database import transaction
 from backend.models.group import GroupMember
 from backend.models.group_invitation import GroupInvitation
+from backend.models.user import User
+from backend.services.notification_service import NotificationService
 
 
 PENDING_STATUS = "pending"
@@ -141,4 +143,57 @@ class GroupInvitationService:
         """Decline a pending invitation (leaves the pending list)."""
         return await GroupInvitationService._resolve(
             db, user_id, invitation_id, DECLINED_STATUS
-        )
+        )
+
+    @staticmethod
+    async def create_invitation(
+        db: AsyncSession,
+        *,
+        invitee_user_id: UUID,
+        group_name: str,
+        invite_code: str,
+        invited_by: str | None = None,
+    ) -> GroupInvitation:
+        """
+        Create a group invitation and send a notification to the invitee.
+
+        Idempotent: if a pending invitation already exists for the same
+        (invitee_user_id, invite_code), return the existing one.
+        """
+        existing = await db.scalar(
+            select(GroupInvitation).where(
+                GroupInvitation.user_id == invitee_user_id,
+                GroupInvitation.invite_code == invite_code,
+                GroupInvitation.status == PENDING_STATUS,
+            )
+        )
+        if existing is not None:
+            return existing
+
+        async with transaction(db):
+            invitation = GroupInvitation(
+                user_id=invitee_user_id,
+                group_name=group_name,
+                invite_code=invite_code,
+                invited_by=invited_by,
+                status=PENDING_STATUS,
+            )
+            db.add(invitation)
+            await db.flush()
+
+        # Send notification to invitee
+        await NotificationService.wire_group_invitation(
+            db=db,
+            user_id=invitee_user_id,
+            group_id=None,  # Group might not exist yet in backend
+            group_name=group_name,
+            inviter_name=invited_by,
+            context_data={
+                "invitation_id": str(invitation.id),
+                "group_name": group_name,
+                "invite_code": invite_code,
+                "invited_by": invited_by,
+            },
+        )
+
+        return invitation

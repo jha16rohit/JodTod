@@ -76,7 +76,6 @@ export default function GroupMembers() {
       />
 
       <ScrollView className="flex-1 px-5" contentContainerStyle={{ paddingBottom: 40 }}>
-        {/* Invite banner */}
         <TouchableOpacity activeOpacity={0.85} onPress={() => router.push(`${base}/invite` as any)}>
           <View
             className="flex-row items-center rounded-2xl px-4 py-3.5 mb-5"
@@ -130,7 +129,6 @@ export default function GroupMembers() {
         )}
       </ScrollView>
 
-      {/* Manage-member action sheet (display only: role changes land with moderation tooling) */}
       <Modal visible={!!menuFor} transparent animationType="fade" onRequestClose={() => setMenuFor(null)}>
         <TouchableOpacity
           activeOpacity={1}

@@ -21,12 +21,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.database import transaction
 from backend.models.expense import Expense, ExpenseSplit
 from backend.models.group import Group
-from backend.services.balance_service import CENT, ZERO, parse_money, quantize
+from backend.models.user import User
+from backend.services.balance_service import CENT, ZERO, money, parse_money, quantize
 from backend.services.group_service import (
     GroupNotFoundError,
     GroupService,
     GroupValidationError,
 )
+from backend.services.notification_service import NotificationService
+from sqlalchemy import select
 
 
 class ExpenseValidationError(Exception):
@@ -168,6 +171,56 @@ class ExpenseService:
                     )
                 )
             await db.flush()
+
+        # Create notifications for all group members except the payer
+        # Get member details for notification context
+        member_users = {}
+        if members:
+            member_rows = list(
+                (
+                    await db.execute(select(User).where(User.id.in_(members)))
+                ).scalars().all()
+            )
+            member_users = {u.id: u for u in member_rows}
+
+        payer_user = member_users.get(payer)
+        payer_name = payer_user.name if payer_user and payer_user.name else "Someone"
+
+        # Notify all members except the payer
+        for member_id in members:
+            if member_id == payer:
+                continue
+            member = member_users.get(member_id)
+            member_name = member.name if member and member.name else "Member"
+            await NotificationService.wire_expense_added(
+                db=db,
+                user_id=member_id,
+                group_id=group_id,
+                expense_title=clean_title,
+                expense_amount=money(total),
+                expense_category=None,  # Category not in expense model yet
+                expense_payer=payer_name,
+                expense_note=description,
+                bill_image_ref=None,  # Bill image not in expense model yet
+                context_data={
+                    "expense_id": str(expense.id),
+                    "expense_title": clean_title,
+                    "amount": money(total),
+                    "currency": group.currency,
+                    "paid_by": payer_name,
+                    "group_name": group.name,
+                    "split_type": split_type,
+                    "shared_with": ", ".join(
+                        [
+                            member_users[pid].name
+                            for pid in share_map.keys()
+                            if pid in member_users and member_users[pid].name
+                        ]
+                    ) or "Group members",
+                    "note": description,
+                },
+            )
+
         return expense
 
     @staticmethod

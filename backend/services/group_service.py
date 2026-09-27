@@ -26,6 +26,7 @@ from backend.models.group import (
     MemberRole,
 )
 from backend.models.user import User
+from backend.services.notification_service import NotificationService
 
 
 class GroupNotFoundError(Exception):
@@ -259,16 +260,51 @@ class GroupService:
                 GroupMember.user_id == user_id,
             )
         )
-        if existing is not None:
-            return existing
-        async with transaction(db):
-            row = GroupMember(
-                group_id=group_id,
-                user_id=user_id,
-                role=MemberRole.MEMBER,
-            )
-            db.add(row)
-            await db.flush()
+        is_new_member = existing is None
+        if is_new_member:
+            async with transaction(db):
+                row = GroupMember(
+                    group_id=group_id,
+                    user_id=user_id,
+                    role=MemberRole.MEMBER,
+                )
+                db.add(row)
+                await db.flush()
+
+            # Notify existing members about new member
+            group = await db.get(Group, group_id)
+            member_ids = await GroupService.member_user_ids(db, group_id)
+            member_users = {}
+            if member_ids:
+                member_rows = list(
+                    (await db.execute(select(User).where(User.id.in_(member_ids)))).scalars().all()
+                )
+                member_users = {u.id: u for u in member_rows}
+
+            new_member = member_users.get(user_id)
+            new_member_name = new_member.name if new_member and new_member.name else "A new member"
+            requester = member_users.get(requester_id)
+            requester_name = requester.name if requester and requester.name else "An admin"
+
+            for member_id in member_ids:
+                if member_id == user_id:
+                    continue
+                await NotificationService.wire_member_joined_group(
+                    db=db,
+                    user_id=member_id,
+                    group_id=group_id,
+                    group_name=group.name if group else "Group",
+                    by_user_name=requester_name,
+                    context_data={
+                        "group_id": str(group_id),
+                        "group_name": group.name if group else "Group",
+                        "member_name": new_member_name,
+                        "member_id": str(user_id),
+                        "added_by": requester_name,
+                    },
+                )
+        else:
+            row = existing
         return row
 
     @staticmethod
@@ -287,7 +323,8 @@ class GroupService:
                 GroupMember.user_id == user_id,
             )
         )
-        if existing is None:
+        is_new_member = existing is None
+        if is_new_member:
             async with transaction(db):
                 db.add(
                     GroupMember(
@@ -297,6 +334,37 @@ class GroupService:
                     )
                 )
                 await db.flush()
+
+            # Notify existing members about new member
+            member_ids = await GroupService.member_user_ids(db, group.id)
+            member_users = {}
+            if member_ids:
+                member_rows = list(
+                    (await db.execute(select(User).where(User.id.in_(member_ids)))).scalars().all()
+                )
+                member_users = {u.id: u for u in member_rows}
+
+            new_member = member_users.get(user_id)
+            new_member_name = new_member.name if new_member and new_member.name else "A new member"
+
+            for member_id in member_ids:
+                if member_id == user_id:
+                    continue
+                member = member_users.get(member_id)
+                member_name = member.name if member and member.name else "Member"
+                await NotificationService.wire_member_joined_group(
+                    db=db,
+                    user_id=member_id,
+                    group_id=group.id,
+                    group_name=group.name,
+                    by_user_name=new_member_name,
+                    context_data={
+                        "group_id": str(group.id),
+                        "group_name": group.name,
+                        "member_name": new_member_name,
+                        "member_id": str(user_id),
+                    },
+                )
         return group
 
     @staticmethod

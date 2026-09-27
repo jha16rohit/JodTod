@@ -15,7 +15,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Index, String, Text, func
+from sqlalchemy import DateTime, Enum, ForeignKey, Index, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -58,12 +58,6 @@ class Notification(Base, UUIDPrimaryKeyMixin, TimestampMixin):
             "recipient_user_id",
             "notification_type",
             "created_at",
-        ),
-        UniqueConstraint(
-            "recipient_user_id",
-            "notification_type",
-            "__entity_id__",
-            name="uq_recipient_type_entity_dedup",
         ),
     )
 
@@ -129,7 +123,7 @@ class Notification(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     # Type‑specific free-form context (e.g. split info, participant names,
     # counter‑party avatars, etc.). Stored as JSONB so the schema stays
     # flat while still allowing rich per‑type data.
-    metadata: Mapped[dict | None] = mapped_column(
+    context_data: Mapped[dict | None] = mapped_column(
         JSONB,
         nullable=True,
     )

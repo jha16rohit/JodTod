@@ -375,3 +375,73 @@ export async function fetchGroupExpenses(
     total: typeof body.total === "number" ? body.total : expenses.length,
   };
 }
+
+export async function createExpense(input: {
+  group_id: string;
+  title: string;
+  amount: string;
+  payer_user_id: string;
+  split_type: string;
+  participant_ids: string[];
+  splits: { user_id: string; amount: string }[];
+  description?: string;
+}): Promise<{
+  id: string;
+  group_id: string;
+  title: string;
+  description: string | null;
+  amount: string;
+  currency: string;
+  payer_user_id: string;
+  payer_name: string;
+  expense_date: string | null;
+  created_at: string | null;
+  splits: { user_id: string; display_name: string; share_amount: string }[];
+}> {
+  const body = await request<unknown>("/expenses", {
+    method: "POST",
+    body: JSON.stringify({
+      group_id: input.group_id,
+      title: input.title,
+      amount: input.amount,
+      currency: "INR",
+      payer_user_id: input.payer_user_id,
+      split_type: input.split_type,
+      participant_ids: input.participant_ids,
+      splits: input.splits,
+      description: input.description ?? undefined,
+    }),
+  });
+  const result = body as {
+    id: unknown;
+    group_id: unknown;
+    title: unknown;
+    description: unknown;
+    amount: unknown;
+    currency: unknown;
+    payer_user_id: unknown;
+    payer_name: unknown;
+    expense_date: unknown;
+    created_at: unknown;
+    splits: unknown[];
+  };
+  return {
+    id: String(result.id),
+    group_id: String(result.group_id),
+    title: String(result.title),
+    description: typeof result.description === "string" ? result.description : null,
+    amount: String(result.amount),
+    currency: String(result.currency ?? "INR"),
+    payer_user_id: String(result.payer_user_id),
+    payer_name: String(result.payer_name ?? "Member"),
+    expense_date: typeof result.expense_date === "string" ? result.expense_date : null,
+    created_at: typeof result.created_at === "string" ? result.created_at : null,
+    splits: Array.isArray(result.splits)
+      ? result.splits.map((s: any) => ({
+          user_id: String(s.user_id),
+          display_name: String(s.display_name ?? "Member"),
+          share_amount: String(s.share_amount ?? "0.00"),
+        }))
+      : [],
+  };
+}

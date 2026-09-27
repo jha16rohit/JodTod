@@ -1,20 +1,21 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  ImageBackground,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
+import { BlurView, BlurTargetView } from 'expo-blur';
 import { useRouter } from 'expo-router';
+import { Svg, Path, Defs, Marker, Circle } from 'react-native-svg';
 import Animated, {
   useSharedValue,
-  useAnimatedStyle,
+  useAnimatedProps,
   withTiming,
   withRepeat,
   withDelay,
@@ -22,255 +23,306 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useAuth } from '../../context/AuthContext';
 
+const GREEN = '#34D399';
+const CYAN = '#22D3EE';
+const CORAL = '#FB7185';
+
+// ---------------------------------------------------------------------------
+// Static display data (reference content; backend integration comes later)
+// ---------------------------------------------------------------------------
+
 const getGreeting = () => {
   const hour = new Date().getHours();
-
-  if (hour >= 5 && hour < 12) {
-    return 'Good Morning';
-  }
-
-  if (hour >= 12 && hour < 17) {
-    return 'Good Afternoon';
-  }
-
-  if (hour >= 17 && hour < 21) {
-    return 'Good Evening';
-  }
-
-  return 'Good Night';
+  if (hour >= 5 && hour < 12) return 'Good Morning,';
+  if (hour >= 12 && hour < 17) return 'Good Afternoon,';
+  if (hour >= 17 && hour < 21) return 'Good Evening,';
+  return 'Good Night,';
 };
 
 const groups = [
-  {
-    name: 'Goa Trip',
-    members: '5 members',
-    icon: 'sunny',
-    status: 'owed',
-    amount: '₹2,450',
-  },
-  {
-    name: 'Flatmates',
-    members: '4 members',
-    icon: 'home',
-    status: 'owe',
-    amount: '₹680',
-  },
-  {
-    name: 'Office Group',
-    members: '8 members',
-    icon: 'briefcase',
-    status: 'owed',
-    amount: '₹1,920',
-  },
-  {
-    name: 'Badminton',
-    members: '6 members',
-    icon: 'football',
-    status: 'owe',
-    amount: '₹320',
-  },
+  { name: 'Goa Trip', members: '5 members', amount: '₹12,450', icon: 'airplane', tint: '#34D399' },
+  { name: 'Flatmates', members: '4 members', amount: '₹8,320', icon: 'home', tint: '#38BDF8' },
 ];
 
 const expenses = [
   {
-    title: "Dinner at Bruno's",
-    meta: 'Paid by you • 4 people',
-    date: 'Apr 16, 2025',
-    amount: '₹2,850',
-    positive: false,
-    icon: 'restaurant',
+    title: 'Cafe Coffee Day',
+    meta: 'Goa Trip • Today, 8:24 AM',
+    amount: '₹450',
+    status: 'You paid',
+    statusStyle: 'paid' as const,
+    icon: 'cafe',
+    iconColor: '#FB923C',
   },
   {
-    title: 'Electricity Bill',
-    meta: 'Paid by Aman • 3 people',
-    date: 'Apr 14, 2025',
+    title: 'Dinner at Marina',
+    meta: 'Flatmates • Yesterday, 9:12 PM',
     amount: '₹1,200',
-    positive: true,
-    icon: 'flash',
+    status: 'Split equally',
+    statusStyle: 'split' as const,
+    icon: 'restaurant',
+    iconColor: '#C084FC',
   },
   {
-    title: 'Movie Night',
-    meta: 'Paid by Neha • 5 people',
-    date: 'Apr 12, 2025',
+    title: 'Groceries',
+    meta: 'Flatmates • Apr 14, 2025',
     amount: '₹980',
-    positive: false,
-    icon: 'film',
-  },
-  {
-    title: 'Grocery Run',
-    meta: 'Paid by Karan • 3 people',
-    date: 'Apr 10, 2025',
-    amount: '₹540',
-    positive: true,
+    status: 'You paid',
+    statusStyle: 'paid' as const,
     icon: 'cart',
+    iconColor: '#34D399',
   },
 ];
 
-const moneyFlowLeft = [
-  { name: 'Aman', amount: '+₹2,400' },
-  { name: 'Priya', amount: '+₹1,800' },
-  { name: 'Rohan', amount: '+₹1,500' },
+const flowLeft = [
+  { name: 'AMAN', amount: '₹1,200', initial: 'A', tint: '#34D399' },
+  { name: 'NEHA', amount: '₹850', initial: 'N', tint: '#22D3EE' },
+  { name: 'ROHIT', amount: '₹650', initial: 'R', tint: '#A78BFA' },
 ];
 
-const moneyFlowRight = [
-  { name: 'Karan', amount: '-₹2,000' },
-  { name: 'Neha', amount: '-₹1,200' },
-  { name: 'Aditya', amount: '-₹900' },
+const flowRight = [
+  { name: 'RAHUL', amount: '₹500', initial: 'R', tint: '#38BDF8' },
+  { name: 'PRIYA', amount: '₹300', initial: 'P', tint: '#FB7185' },
+  { name: 'KARAN', amount: '₹180', initial: 'K', tint: '#FBBF24' },
 ];
 
-const cardShadow = {
-  shadowColor: '#0B3D62',
-  shadowOffset: { width: 0, height: 5 },
-  shadowOpacity: 0.1,
-  shadowRadius: 9,
-  elevation: 4,
-};
+// OWE-direction datasets: people the user must pay (outgoing amounts).
+const oweLeft = [
+  { name: 'AMAN', amount: '₹900', initial: 'A', tint: '#FB7185' },
+  { name: 'NEHA', amount: '₹420', initial: 'N', tint: '#F59E0B' },
+  { name: 'ROHIT', amount: '₹310', initial: 'R', tint: '#FB7185' },
+];
 
-const heroShadow = {
-  shadowColor: '#0E6B5C',
-  shadowOffset: { width: 0, height: 8 },
-  shadowOpacity: 0.16,
-  shadowRadius: 16,
-  elevation: 8,
+const oweRight = [
+  { name: 'RAHUL', amount: '₹380', initial: 'R', tint: '#F59E0B' },
+  { name: 'PRIYA', amount: '₹260', initial: 'P', tint: '#FB7185' },
+  { name: 'KARAN', amount: '₹150', initial: 'K', tint: '#F59E0B' },
+];
+
+// Connector geometry in the 320x250 map space. TOWARD curves run pill edge
+// -> avatar edge (arrowhead lands just outside the face = money flowing in).
+// AWAY curves are the exact geometric reverse (money flowing out).
+// Center avatar occupies roughly x 122-198, so endpoints stop short of it.
+type Cubic = [number, number, number, number, number, number, number, number];
+
+const FLOW_TOWARD_LEFT: Cubic[] = [
+  [90, 44, 100, 58, 114, 74, 132, 93],
+  [90, 125, 100, 125, 110, 125, 118, 125],
+  [90, 208, 100, 194, 114, 176, 133, 157],
+];
+
+const FLOW_TOWARD_RIGHT: Cubic[] = [
+  [230, 44, 220, 58, 206, 74, 188, 93],
+  [230, 125, 220, 125, 210, 125, 202, 125],
+  [230, 208, 220, 194, 206, 176, 187, 157],
+];
+
+const reverseCubic = (c: Cubic): Cubic => [c[6], c[7], c[4], c[5], c[2], c[3], c[0], c[1]];
+
+const FLOW_AWAY_LEFT: Cubic[] = FLOW_TOWARD_LEFT.map(reverseCubic);
+const FLOW_AWAY_RIGHT: Cubic[] = FLOW_TOWARD_RIGHT.map(reverseCubic);
+
+const cubicD = (c: Cubic) =>
+  `M${c[0]},${c[1]} C${c[2]},${c[3]} ${c[4]},${c[5]} ${c[6]},${c[7]}`;
+
+type Pt = { x: number; y: number };
+
+// Sampled once at module level — the particle worklet lerps between these.
+const sampleCubic = (c: Cubic, n = 56): Pt[] => {
+  const pts: Pt[] = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const u = 1 - t;
+    pts.push({
+      x:
+        u * u * u * c[0] +
+        3 * u * u * t * c[2] +
+        3 * u * t * t * c[4] +
+        t * t * t * c[6],
+      y:
+        u * u * u * c[1] +
+        3 * u * u * t * c[3] +
+        3 * u * t * t * c[5] +
+        t * t * t * c[7],
+    });
+  }
+  return pts;
 };
 
 // ---------------------------------------------------------------------------
-// Money Flow animated connection: a short translucent track with one slow
-// liquid particle gliding along it. Green = incoming (Person -> You),
-// coral = outgoing (You -> Person). Slow + eased + staggered, never game-like.
+// Shared dark-glass shell (real Android blur via blurTarget)
 // ---------------------------------------------------------------------------
-const TRACK_W = 26;
-const DOT_SIZE = 6;
 
-function FlowTrack({
-  lineColor,
-  dotColor,
-  delay,
+function GlassShell({
+  children,
+  radius,
+  intensity = 55,
+  blurTarget,
+  style,
 }: {
-  lineColor: string;
-  dotColor: string;
-  delay: number;
+  children: React.ReactNode;
+  radius: number;
+  intensity?: number;
+  blurTarget: React.RefObject<View | null>;
+  style?: object;
 }) {
+  return (
+    <View
+      className="overflow-hidden border border-white/20"
+      style={[
+        { borderRadius: radius },
+        {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 6 },
+          shadowOpacity: 0.3,
+          shadowRadius: 14,
+          elevation: 7,
+        },
+        style,
+      ]}
+    >
+      <BlurView
+        blurTarget={blurTarget}
+        blurMethod="dimezisBlurView"
+        intensity={intensity}
+        tint="dark"
+        style={[StyleSheet.absoluteFill, { borderRadius: radius }]}
+      />
+      <View
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFill,
+          { backgroundColor: 'rgba(10,35,55,0.38)', borderRadius: radius },
+        ]}
+      />
+      <View
+        pointerEvents="none"
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 14,
+          right: 14,
+          height: 1,
+          backgroundColor: 'rgba(255,255,255,0.16)',
+        }}
+      />
+      {children}
+    </View>
+  );
+}
+
+function SectionHeader({ title }: { title: string }) {
+  return (
+    <View className="mb-2.5 flex-row items-center justify-between">
+      <Text className="text-[17px] font-extrabold text-white">{title}</Text>
+      <TouchableOpacity activeOpacity={0.7} className="flex-row items-center">
+        <Text className="mr-1 text-[12px] font-semibold text-white/70">See all</Text>
+        <Ionicons name="chevron-forward" size={14} color="rgba(255,255,255,0.7)" />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Energy particle: travels the ACTUAL sampled cubic (never straight-line
+// left/top animation). Runs fully on the UI thread: one linear withTiming
+// loop, opacity fades at both ends so the loop reset is invisible.
+// ---------------------------------------------------------------------------
+
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+
+const positionAlong = (pts: Pt[], t: number, opacityScale: number) => {
+  'worklet';
+  const n = pts.length - 1;
+  const clamped = Math.min(Math.max(t, 0), 1);
+  const scaled = clamped * n;
+  const i = Math.min(Math.floor(scaled), n - 1);
+  const f = scaled - i;
+  const a = pts[i];
+  const b = pts[i + 1];
+  const fade = Math.sin(clamped * Math.PI);
+  return {
+    cx: a.x + (b.x - a.x) * f,
+    cy: a.y + (b.y - a.y) * f,
+    opacity: (0.12 + 0.88 * fade) * opacityScale,
+  };
+};
+
+function FlowDots({
+  curve,
+  color,
+  delay,
+  duration = 2100,
+}: {
+  curve: Cubic;
+  color: string;
+  delay: number;
+  duration?: number;
+}) {
+  // Module-level curve identity is stable, so this samples exactly once.
+  const samples = React.useMemo(() => sampleCubic(curve, 56), [curve]);
   const progress = useSharedValue(0);
 
   useEffect(() => {
     progress.value = withDelay(
       delay,
       withRepeat(
-        withTiming(1, {
-          duration: 2800,
-          easing: Easing.inOut(Easing.ease),
-        }),
+        withTiming(1, { duration, easing: Easing.linear }),
         -1,
         false
       )
     );
-  }, [delay, progress]);
+  }, [delay, duration, progress]);
 
-  const dotAnimated = useAnimatedStyle(() => ({
-    transform: [{ translateX: progress.value * (TRACK_W - DOT_SIZE) }],
-    opacity: 1 - progress.value * 0.4,
-  }));
+  const dotProps = useAnimatedProps(() => positionAlong(samples, progress.value, 1));
+  const haloProps = useAnimatedProps(() => positionAlong(samples, progress.value, 0.32));
 
   return (
-    <View style={{ width: TRACK_W, height: 14, justifyContent: 'center' }}>
-      <View
-        style={{
-          height: 2,
-          borderRadius: 2,
-          backgroundColor: lineColor,
-          opacity: 0.4,
-        }}
-      />
-      <Animated.View
-        style={[
-          {
-            position: 'absolute',
-            top: 4,
-            left: 0,
-            width: DOT_SIZE,
-            height: DOT_SIZE,
-            borderRadius: DOT_SIZE / 2,
-            backgroundColor: dotColor,
-            shadowColor: dotColor,
-            shadowOpacity: 0.9,
-            shadowRadius: 4,
-            elevation: 3,
-          },
-          dotAnimated,
-        ]}
-      />
-    </View>
+    <>
+      <AnimatedCircle r={7} fill={color} animatedProps={haloProps} />
+      <AnimatedCircle r={3} fill="#FFFFFF" animatedProps={dotProps} />
+    </>
   );
 }
 
-// Gentle breathing scale on the YOU node — very slow, barely perceptible.
-function YouNode() {
-  const breath = useSharedValue(1);
-
-  useEffect(() => {
-    breath.value = withRepeat(
-      withTiming(1.045, {
-        duration: 3400,
-        easing: Easing.inOut(Easing.ease),
-      }),
-      -1,
-      true
-    );
-  }, [breath]);
-
-  const pulse = useAnimatedStyle(() => ({
-    transform: [{ scale: breath.value }],
-  }));
-
-  return (
-    <Animated.View
-      className="h-[90px] w-[90px] items-center justify-center"
-      style={pulse}
-    >
-      <View
-        className="h-full w-full items-center justify-center overflow-hidden rounded-full border-2 border-white/30"
-        style={cardShadow}
-      >
-        <BlurView
-          intensity={45}
-          tint="default"
-          style={[StyleSheet.absoluteFill, { borderRadius: 45 }]}
-        />
-        <LinearGradient
-          colors={[
-            'rgba(32,184,121,0.20)',
-            'rgba(240,79,56,0.15)',
-            'rgba(108,99,255,0.10)',
-          ]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[StyleSheet.absoluteFill, { borderRadius: 45 }]}
-        />
-        <LinearGradient
-          colors={['rgba(255,255,255,0.30)', 'rgba(255,255,255,0)']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 0, y: 0.5 }}
-          style={[StyleSheet.absoluteFill, { borderRadius: 45 }]}
-        />
-        <Ionicons name="person" size={38} color="#0B3D62" />
-      </View>
-    </Animated.View>
-  );
-}
-
-const quickActions = [
-  { label: 'Scan Bill', icon: 'barcode', color: '#FF8EAB' },
-  { label: 'Add Expense', icon: 'add', color: '#20B879' },
-  { label: 'Settle Up', icon: 'reload', color: '#F04F38' },
-  { label: 'Create Group', icon: 'people', color: '#39D59A' },
-  { label: 'View Reports', icon: 'grid', color: '#6C63FF' },
-] as const;
+// ---------------------------------------------------------------------------
+// Home screen (content only — tab bar lives in the parent layout)
+// ---------------------------------------------------------------------------
 
 export default function Home() {
   const router = useRouter();
   const { user } = useAuth();
-  const displayName = user?.name?.split(' ')[0] || 'there';
+  const displayName = user?.name?.split(' ')[0] || 'Rohit';
+  const backgroundRef = useRef<View>(null);
+  const [flowTab, setFlowTab] = useState<'get' | 'owe'>('get');
+
+  // Single source of truth for the financial direction. Header pill,
+  // balance card, people amounts, and arrow geometry all read from this.
+  const isGet = flowTab === 'get';
+  const fin = {
+    label: isGet ? 'You will get' : 'You owe',
+    amount: isGet ? '₹3,680' : '₹1,250',
+    sub: isGet ? 'Across 5 people • 4 groups' : 'Across 3 people • 2 groups',
+    arrow: isGet ? 'arrow-up' : 'arrow-down',
+    accent: isGet ? '#34D399' : '#FB7185',
+    accentSoft: isGet ? 'rgba(52,211,153,0.16)' : 'rgba(251,113,133,0.16)',
+    gradient: (isGet ? ['#34D399', '#0E9F6E'] : ['#FB7185', '#EA580C']) as [
+      string,
+      string,
+    ],
+    left: isGet ? flowLeft : oweLeft,
+    right: isGet ? flowRight : oweRight,
+    amountLeft: isGet ? GREEN : '#FB7185',
+    amountRight: isGet ? CYAN : '#FB7185',
+    strokeLeft: isGet ? GREEN : '#FB7185',
+    strokeRight: isGet ? CYAN : '#F59E0B',
+    markerLeft: isGet ? 'arrowG' : 'arrowR',
+    markerRight: isGet ? 'arrowC' : 'arrowO',
+    pathsLeft: isGet ? FLOW_TOWARD_LEFT : FLOW_AWAY_LEFT,
+    pathsRight: isGet ? FLOW_TOWARD_RIGHT : FLOW_AWAY_RIGHT,
+    particleLeft: isGet ? '#6EE7B7' : '#FDA4AF',
+    particleRight: isGet ? '#67E8F9' : '#FDBA74',
+  } as const;
 
   const handleProfilePress = () => {
     router.push('/profile');
@@ -278,615 +330,611 @@ export default function Home() {
 
   return (
     <View style={{ flex: 1 }}>
-      <ImageBackground
-        source={require('../../../assets/images/jodtod/background_onboarding.png')}
-        style={StyleSheet.absoluteFill}
-        resizeMode="cover"
-      />
+      <BlurTargetView ref={backgroundRef} style={StyleSheet.absoluteFill}>
+        <Image
+          source={require('../../../assets/images/jodtod/background_home.png')}
+          resizeMode="cover"
+          style={StyleSheet.absoluteFill}
+        />
+      </BlurTargetView>
+
       <SafeAreaView edges={['top']} style={{ flex: 1 }}>
         <ScrollView
           showsVerticalScrollIndicator={false}
-          className="px-5"
-          contentContainerStyle={{ paddingBottom: 120 }}
+          className="px-4"
+          contentContainerStyle={{ paddingBottom: 110 }}
         >
-          {/* Header - almost floating, minimal glass */}
-          <View className="mb-4 flex-row items-center justify-between">
-            {/* Greeting */}
-            <View className="flex-row items-center">
-              <View>
-                <View className="flex-row items-center">
-                  <Text className="text-[17px] font-semibold text-[#20B879]">
-                    {getGreeting()},
-                  </Text>
-
-                  <Text className="ml-1.5 text-[23px] font-extrabold text-[#FF5A36]">
-                    {displayName}
-                  </Text>
+          {/* Header — profile left, Search + Notification top-right */}
+          <View className="mb-3 mt-1 flex-row items-center justify-between">
+            <View className="mr-2 flex-row min-w-0 flex-1 items-center">
+              <TouchableOpacity activeOpacity={0.85} onPress={handleProfilePress}>
+                <View
+                  className="h-16 w-16 overflow-hidden rounded-full border-2 border-white/30"
+                  style={{
+                    shadowColor: '#22D3EE',
+                    shadowOffset: { width: 0, height: 0 },
+                    shadowOpacity: 0.45,
+                    shadowRadius: 12,
+                    elevation: 7,
+                  }}
+                >
+                  <Image
+                    source={require('../../../assets/images/jodtod/people.png')}
+                    resizeMode="cover"
+                    style={{ width: '100%', height: '100%' }}
+                  />
                 </View>
+                <View
+                  className="absolute bottom-0.5 right-0.5 h-[14px] w-[14px] rounded-full border-2 border-white"
+                  style={{
+                    backgroundColor: '#22C55E',
+                    shadowColor: '#22C55E',
+                    shadowOpacity: 0.9,
+                    shadowRadius: 5,
+                    elevation: 3,
+                  }}
+                />
+              </TouchableOpacity>
 
-                <Text className="mt-1 text-[11px] font-medium text-[#20B879]">
+              <View className="ml-3 flex-1">
+                <Text className="text-[14px] font-medium text-white">
+                  {getGreeting()}
+                </Text>
+                <Text
+                  className="text-[30px] font-extrabold leading-[34px] text-white"
+                  numberOfLines={1}
+                >
+                  {displayName} 👋
+                </Text>
+                <Text className="text-[13px] text-white/80" numberOfLines={1}>
                   Split Smart. Stay Together.
                 </Text>
+                <View className="mt-1.5 h-[3px] w-[40px] rounded-full bg-white opacity-90" />
               </View>
             </View>
-
-            {/* Header Actions - Search, Notifications, Profile - NO logout */}
             <View className="flex-row items-center gap-2">
               <TouchableOpacity
                 activeOpacity={0.8}
-                className="h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-white/5"
+                className="h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-white/10"
               >
-                <Ionicons name="search" size={20} color="#0B3D62" />
+                <Ionicons name="search" size={20} color="#FFFFFF" />
               </TouchableOpacity>
-
-              <TouchableOpacity
-                activeOpacity={0.8}
-                className="h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-white/5"
-              >
-                <Ionicons name="notifications" size={20} color="#0B3D62" />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                activeOpacity={0.8}
-                onPress={handleProfilePress}
-                className="h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-white/20 bg-white/5"
-              >
-                <Ionicons name="person" size={20} color="#0B3D62" />
-              </TouchableOpacity>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              className="h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-white/10"
+            >
+              <Ionicons name="notifications" size={20} color="#FFFFFF" />
+              <View
+                className="absolute right-2.5 top-2.5 h-[12px] w-[12px] rounded-full border border-white"
+                style={{
+                  backgroundColor: '#EF4444',
+                  shadowColor: '#EF4444',
+                  shadowOpacity: 0.9,
+                  shadowRadius: 4,
+                  elevation: 3,
+                }}
+              />
+            </TouchableOpacity>
             </View>
           </View>
 
-          {/* Balance Hero Card - one large glass surface */}
-          <View className="mb-5 rounded-[32px]" style={heroShadow}>
-            <View className="overflow-hidden rounded-[32px] border border-white/20">
+          {/* Get / Owe toggle — both states always visible, tap either half */}
+          <View className="mb-3">
+            <View className="w-full overflow-hidden rounded-[28px] border border-white/20">
               <BlurView
+                blurTarget={backgroundRef}
+                blurMethod="dimezisBlurView"
                 intensity={50}
                 tint="dark"
-                style={[StyleSheet.absoluteFill, { borderRadius: 32 }]}
+                style={StyleSheet.absoluteFill}
               />
-              <LinearGradient
-                colors={[
-                  'rgba(28,120,148,0.35)',
-                  'rgba(8,123,118,0.3)',
-                  'rgba(24,168,110,0.35)',
+              <View
+                pointerEvents="none"
+                style={[
+                  StyleSheet.absoluteFill,
+                  { backgroundColor: 'rgba(10,35,55,0.4)' },
                 ]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={[StyleSheet.absoluteFill, { borderRadius: 32 }]}
               />
-              <LinearGradient
-                colors={['rgba(255,255,255,0.12)', 'rgba(255,255,255,0)']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 0, y: 0.6 }}
-                style={[StyleSheet.absoluteFill, { borderRadius: 32 }]}
-              />
-
-              <View className="p-6">
-                <View className="flex-row items-center">
-                  {/* You Owe - left */}
-                  <View className="flex-1">
-                    <View className="mb-2 flex-row items-center">
-                      <View className="mr-3 h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-white/10">
-                        <Ionicons name="arrow-down" size={20} color="#FFFFFF" />
-                      </View>
-                      <Text className="text-[12px] font-medium text-white">
-                        You owe
-                      </Text>
-                    </View>
-                    <Text className="text-[26px] font-extrabold text-white">
-                      ₹1,230
-                    </Text>
-                    <Text className="text-[11px] text-white/40">
-                      Across 3 groups
-                    </Text>
-                  </View>
-
-                  {/* Subtle divider - very faint */}
-                  <View className="mx-3 h-16 w-px bg-white/5" />
-
-                  {/* You're Owed - right */}
-                  <View className="flex-1">
-                    <View className="mb-2 flex-row items-center">
-                      <View className="mr-3 h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-white/10">
-                        <Ionicons name="arrow-up" size={20} color="#FFFFFF" />
-                      </View>
-                      <Text className="text-[12px] font-medium text-white">
-                        You're owed
-                      </Text>
-                    </View>
-                    <Text className="text-[26px] font-extrabold text-white">
-                      ₹3,680
-                    </Text>
-                    <Text className="text-[11px] text-white/40">
-                      Across 5 groups
-                    </Text>
-                  </View>
-                </View>
-
-                <View className="mt-4 flex-row items-center justify-between">
-                  <View className="h-8 w-8 items-center justify-center rounded-full border border-white/20 bg-white/10">
-                    <Ionicons name="bar-chart" size={17} color="#FFFFFF" />
-                  </View>
-
-                  <TouchableOpacity
-                    activeOpacity={0.8}
-                    className="flex-row items-center rounded-full border border-white/20 bg-white/10 px-3 py-1.5"
-                  >
-                    <Text className="mr-1 text-[11px] font-bold text-white">
-                      View details
-                    </Text>
-                    <Ionicons name="chevron-forward" size={12} color="#FFFFFF" />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-          </View>
-
-          {/* Quick Actions - individual floating glass tiles */}
-          <View className="mb-4">
-            <Text className="mb-2 text-[20px] font-extrabold text-[#0B3D62]">
-              Quick Actions
-            </Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ gap: 10, paddingHorizontal: 2 }}
-            >
-              {quickActions.map((action) => (
-                <View
-                  key={action.label}
-                  className="w-[92px] shrink-0 overflow-hidden rounded-[14px] border border-white/20"
-                >
-                  <BlurView
-                    intensity={30}
-                    tint="default"
-                    style={StyleSheet.absoluteFill}
-                  />
-                  <LinearGradient
-                    colors={[
-                      'rgba(255,255,255,0.16)',
-                      'rgba(255,255,255,0.06)',
-                    ]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={StyleSheet.absoluteFill}
-                  />
-                  <View className="items-center p-3">
-                    <View className="h-9 w-9 items-center justify-center rounded-full bg-white/10">
-                      <Ionicons
-                        name={action.icon as any}
-                        size={18}
-                        color={action.color}
-                      />
-                    </View>
-                    <Text className="mt-1.5 text-center text-[10px] font-semibold text-[#0B3D62]">
-                      {action.label}
-                    </Text>
-                  </View>
-                </View>
-              ))}
-            </ScrollView>
-          </View>
-
-          {/* Your Groups - floating glass cards */}
-          <View className="mb-4">
-            <View className="mb-2 flex-row items-center justify-between">
-              <Text className="text-[20px] font-extrabold text-[#0B3D62]">
-                Your Groups
-              </Text>
-              <TouchableOpacity
-                activeOpacity={0.8}
-                className="flex-row items-center"
-              >
-                <Text className="mr-1 text-[13px] font-bold text-[#149C73]">
-                  See all
-                </Text>
-                <Ionicons name="chevron-forward" size={15} color="#149C73" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              className="-mx-1"
-              contentContainerClassName="px-1"
-            >
-              {groups.map((group) => (
-                <View
-                  key={group.name}
-                  className="mr-2.5 w-[150px] rounded-[18px]"
-                  style={cardShadow}
-                >
-                  <View className="overflow-hidden rounded-[18px] border border-white/20">
-                    <BlurView
-                      intensity={40}
-                      tint="default"
-                      style={[StyleSheet.absoluteFill, { borderRadius: 18 }]}
-                    />
-                    <LinearGradient
-                      colors={[
-                        'rgba(255,255,255,0.22)',
-                        'rgba(198,228,222,0.14)',
-                      ]}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={[StyleSheet.absoluteFill, { borderRadius: 18 }]}
-                    />
-                    <LinearGradient
-                      colors={[
-                        'rgba(255,255,255,0.35)',
-                        'rgba(255,255,255,0)',
-                      ]}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 0, y: 0.5 }}
-                      style={[StyleSheet.absoluteFill, { borderRadius: 18 }]}
-                    />
-
-                    <TouchableOpacity activeOpacity={0.9} className="p-3">
-                      <View className="flex-row items-center">
-                        <View className="mr-2 h-8 w-8 items-center justify-center rounded-full border border-white/20 bg-white/10">
-                          <Ionicons
-                            name={group.icon as any}
-                            size={16}
-                            color="#0B3D62"
-                          />
-                        </View>
-                        <View className="flex-1">
-                          <Text
-                            numberOfLines={1}
-                            className="text-[13px] font-extrabold text-[#0B3D62]"
-                          >
-                            {group.name}
-                          </Text>
-                          <Text className="mt-0.5 text-[10px] text-[#5B7C93]">
-                            {group.members}
-                          </Text>
-                        </View>
-                        <Ionicons
-                          name="chevron-forward"
-                          size={14}
-                          color="#7DA0B1"
-                        />
-                      </View>
-
-                      <View
-                        className={
-                          group.status === 'owed'
-                            ? 'mt-2 rounded-xl border border-[#149C73]/20 bg-[#E7F7F2]/60 px-2.5 py-1.5'
-                            : 'mt-2 rounded-xl border border-[#E84D39]/20 bg-[#FDEDEA]/60 px-2.5 py-1.5'
-                        }
-                      >
-                        <Text
-                          className={
-                            group.status === 'owed'
-                              ? 'text-[9px] font-medium text-[#15866C]'
-                              : 'text-[9px] font-medium text-[#E05A45]'
-                          }
-                        >
-                          {group.status === 'owed' ? "You're owed" : 'You owe'}
-                        </Text>
-                        <Text
-                          className={
-                            group.status === 'owed'
-                              ? 'mt-0.5 text-[13px] font-extrabold text-[#149C73]'
-                              : 'mt-0.5 text-[13px] font-extrabold text-[#E84D39]'
-                          }
-                        >
-                          {group.amount}
-                        </Text>
-                      </View>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ))}
-            </ScrollView>
-          </View>
-
-          {/* Recent Expenses - one unified glass container */}
-          <View className="mb-4">
-            <View className="mb-2 flex-row items-center justify-between">
-              <Text className="text-[20px] font-extrabold text-[#0B3D62]">
-                Recent Expenses
-              </Text>
-              <TouchableOpacity
-                activeOpacity={0.8}
-                className="flex-row items-center"
-              >
-                <Text className="mr-1 text-[13px] font-bold text-[#149C73]">
-                  See all
-                </Text>
-                <Ionicons name="chevron-forward" size={15} color="#149C73" />
-              </TouchableOpacity>
-            </View>
-
-            <View className="rounded-[24px]" style={cardShadow}>
-              <View className="overflow-hidden rounded-[24px] border border-white/20">
-                <BlurView
-                  intensity={40}
-                  tint="default"
-                  style={[StyleSheet.absoluteFill, { borderRadius: 24 }]}
-                />
-                <LinearGradient
-                  colors={[
-                    'rgba(255,255,255,0.22)',
-                    'rgba(198,228,222,0.14)',
-                  ]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={[StyleSheet.absoluteFill, { borderRadius: 24 }]}
-                />
-                <LinearGradient
-                  colors={[
-                    'rgba(255,255,255,0.35)',
-                    'rgba(255,255,255,0)',
-                  ]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 0, y: 0.4 }}
-                  style={[StyleSheet.absoluteFill, { borderRadius: 24 }]}
-                />
-
-                <View className="px-3">
-                  {expenses.map((expense) => (
-                    <TouchableOpacity
-                      key={expense.title}
-                      activeOpacity={0.8}
-                      className="flex-row items-center py-3"
-                    >
-                      <View className="mr-3 h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/10">
-                        <Ionicons
-                          name={expense.icon as any}
-                          size={18}
-                          color={expense.positive ? '#149C73' : '#E84D39'}
-                        />
-                      </View>
-
-                      <View className="flex-1">
-                        <Text
-                          numberOfLines={1}
-                          className="text-[14px] font-bold text-[#0B3D62]"
-                        >
-                          {expense.title}
-                        </Text>
-                        <Text
-                          numberOfLines={1}
-                          className="mt-0.5 text-[11px] text-[#5B7C93]"
-                        >
-                          {expense.meta}
-                        </Text>
-                      </View>
-
-                      <View className="ml-3 items-end">
-                        <Text className="text-[10px] text-[#7C93A5]">
-                          {expense.date}
-                        </Text>
-                        <Text
-                          className={`text-[14px] font-extrabold ${
-                            expense.positive
-                              ? 'text-[#149C73]'
-                              : 'text-[#E84D39]'
-                          }`}
-                        >
-                          {expense.amount}
-                        </Text>
-                      </View>
-
-                      <Ionicons
-                        name="chevron-forward"
-                        size={15}
-                        color="#7C93A5"
-                        className="ml-2"
-                      />
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-            </View>
-          </View>
-
-          {/* Money Flow - OPEN visual relationship map, NOT a vertical list */}
-          <View className="mb-6">
-            <View className="mb-3">
-              <Text className="text-[20px] font-extrabold text-[#0B3D62]">
-                Money Flow
-              </Text>
-              <Text className="mt-1 text-[12px] text-[#5B7C93]">
-                Who pays you, and who you pay
-              </Text>
-            </View>
-
-            {/* Horizontal layout: LEFT -> CENTER -> RIGHT */}
-            <View className="flex-row items-center justify-between px-1 py-4">
-              {/* LEFT COLUMN: People who owe YOU (incoming, green) */}
-              <View className="flex-1 items-start">
-                {moneyFlowLeft.map((person, i) => (
-                  <View
-                    key={person.name}
-                    className="mb-4 flex-row items-center"
-                  >
-                    <View
-                      className="overflow-hidden rounded-2xl border border-white/20"
-                      style={{ minWidth: 96 }}
-                    >
-                      <BlurView
-                        intensity={35}
-                        tint="default"
-                        style={StyleSheet.absoluteFill}
-                      />
-                      <LinearGradient
-                        colors={[
-                          'rgba(32,184,121,0.10)',
-                          'rgba(20,156,115,0.05)',
-                        ]}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={StyleSheet.absoluteFill}
-                      />
-                      <View className="flex-row items-center px-2.5 py-2">
-                        <View className="mr-2 h-7 w-7 items-center justify-center overflow-hidden rounded-full border border-white/20 bg-white/10">
-                          <Ionicons
-                            name="person"
-                            size={14}
-                            color="#149C73"
-                          />
-                        </View>
-                        <View className="flex-1">
-                          <Text className="text-[11px] font-bold text-[#0B3D62]">
-                            {person.name}
-                          </Text>
-                          <Text className="text-[13px] font-extrabold text-[#149C73]">
-                            {person.amount}
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-
-                    <View className="ml-1">
-                      <FlowTrack
-                        lineColor="#20B879"
-                        dotColor="#20B879"
-                        delay={i * 450}
-                      />
-                    </View>
-                  </View>
-                ))}
-              </View>
-
-              {/* CENTER: YOU */}
-              <View className="mx-2 items-center">
-                <YouNode />
-                <Text className="mt-2 text-[13px] font-extrabold text-[#0B3D62]">
-                  YOU
-                </Text>
-              </View>
-
-              {/* RIGHT COLUMN: People YOU owe (outgoing, coral) */}
-              <View className="flex-1 items-end">
-                {moneyFlowRight.map((person, i) => (
-                  <View
-                    key={person.name}
-                    className="mb-4 flex-row items-center"
-                  >
-                    <View className="mr-1">
-                      <FlowTrack
-                        lineColor="#E84D39"
-                        dotColor="#E84D39"
-                        delay={i * 450 + 200}
-                      />
-                    </View>
-
-                    <View
-                      className="overflow-hidden rounded-2xl border border-white/20"
-                      style={{ minWidth: 96 }}
-                    >
-                      <BlurView
-                        intensity={35}
-                        tint="default"
-                        style={StyleSheet.absoluteFill}
-                      />
-                      <LinearGradient
-                        colors={[
-                          'rgba(232,77,57,0.10)',
-                          'rgba(240,79,56,0.05)',
-                        ]}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={StyleSheet.absoluteFill}
-                      />
-                      <View className="flex-row items-center px-2.5 py-2">
-                        <View className="mr-2 h-7 w-7 items-center justify-center overflow-hidden rounded-full border border-white/20 bg-white/10">
-                          <Ionicons
-                            name="person"
-                            size={14}
-                            color="#E84D39"
-                          />
-                        </View>
-                        <View className="flex-1">
-                          <Text className="text-[11px] font-bold text-[#0B3D62]">
-                            {person.name}
-                          </Text>
-                          <Text className="text-[13px] font-extrabold text-[#E84D39]">
-                            {person.amount}
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-                  </View>
-                ))}
-              </View>
-            </View>
-
-            {/* View full flow button */}
-            <View className="mt-2 items-center">
-              <TouchableOpacity
-                activeOpacity={0.8}
-                className="flex-row items-center overflow-hidden rounded-full border border-white/20"
-              >
-                <BlurView
-                  intensity={30}
-                  tint="default"
-                  style={StyleSheet.absoluteFill}
-                />
-                <LinearGradient
-                  colors={[
-                    'rgba(255,255,255,0.15)',
-                    'rgba(198,228,222,0.12)',
-                  ]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={StyleSheet.absoluteFill}
-                />
-                <View className="flex-row items-center px-4 py-2">
-                  <Text className="mr-1.5 text-[12px] font-bold text-[#0B3D62]">
-                    View full flow
-                  </Text>
-                  <Ionicons name="chevron-forward" size={14} color="#149C73" />
-                </View>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Insight - small glass surface */}
-          <View className="mb-3 rounded-[24px]" style={cardShadow}>
-            <View className="overflow-hidden rounded-[24px] border border-white/20">
-              <BlurView
-                intensity={35}
-                tint="default"
-                style={[StyleSheet.absoluteFill, { borderRadius: 24 }]}
-              />
-              <LinearGradient
-                colors={[
-                  'rgba(255,255,255,0.20)',
-                  'rgba(214,206,245,0.14)',
-                ]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={[StyleSheet.absoluteFill, { borderRadius: 24 }]}
-              />
-
-              <View className="flex-row items-center justify-between p-3">
-                <View className="mr-3 flex-1 flex-row items-center">
-                  <View className="mr-3 h-8 w-8 items-center justify-center rounded-full bg-white/10">
-                    <Ionicons name="bulb" size={18} color="#6C63FF" />
-                  </View>
-                  <Text
-                    className="flex-1 text-[12px] font-bold"
-                    style={{ color: '#3B2FA0' }}
-                  >
-                    Great job! You received ₹3,200 more than you spent this
-                    month.
-                  </Text>
-                </View>
+              <View className="flex-row p-1">
                 <TouchableOpacity
-                  activeOpacity={0.8}
-                  className="flex-row items-center rounded-full border border-white/20 bg-white/10 px-3 py-1.5"
+                  activeOpacity={0.9}
+                  onPress={() => setFlowTab('get')}
+                  className="flex-1"
                 >
-                  <Text className="mr-1 text-[11px] font-bold text-white">
-                    Details
-                  </Text>
-                  <Ionicons name="arrow-forward" size={12} color="#FFFFFF" />
+                  <View
+                    className="flex-row items-center justify-center rounded-full py-2.5"
+                    style={
+                      isGet
+                        ? {
+                            shadowColor: '#34D399',
+                            shadowOffset: { width: 0, height: 0 },
+                            shadowOpacity: 0.55,
+                            shadowRadius: 10,
+                            elevation: 5,
+                          }
+                        : undefined
+                    }
+                  >
+                    {isGet && (
+                      <LinearGradient
+                        colors={['#34D399', '#22D3EE']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={[StyleSheet.absoluteFill, { borderRadius: 999 }]}
+                      />
+                    )}
+                    <Ionicons
+                      name="arrow-up"
+                      size={16}
+                      color={isGet ? '#FFFFFF' : 'rgba(255,255,255,0.55)'}
+                      style={{ marginRight: 5 }}
+                    />
+                    <Text
+                      className="text-[15px] font-bold"
+                      style={{ color: isGet ? '#FFFFFF' : 'rgba(255,255,255,0.55)' }}
+                    >
+                      You will get
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  activeOpacity={0.9}
+                  onPress={() => setFlowTab('owe')}
+                  className="flex-1"
+                >
+                  <View
+                    className="flex-row items-center justify-center rounded-full py-2.5"
+                    style={
+                      !isGet
+                        ? {
+                            shadowColor: '#FB7185',
+                            shadowOffset: { width: 0, height: 0 },
+                            shadowOpacity: 0.55,
+                            shadowRadius: 10,
+                            elevation: 5,
+                          }
+                        : undefined
+                    }
+                  >
+                    {!isGet && (
+                      <LinearGradient
+                        colors={['#FB7185', '#EA580C']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={[StyleSheet.absoluteFill, { borderRadius: 999 }]}
+                      />
+                    )}
+                    <Ionicons
+                      name="arrow-down"
+                      size={16}
+                      color={!isGet ? '#FFFFFF' : 'rgba(255,255,255,0.55)'}
+                      style={{ marginRight: 5 }}
+                    />
+                    <Text
+                      className="text-[15px] font-bold"
+                      style={{ color: !isGet ? '#FFFFFF' : 'rgba(255,255,255,0.55)' }}
+                    >
+                      You owe
+                    </Text>
+                  </View>
                 </TouchableOpacity>
               </View>
             </View>
+          </View>
+
+          {/* Main balance card */}
+          <View className="mb-3">
+            <GlassShell radius={26} blurTarget={backgroundRef}>
+              <LinearGradient
+                colors={[
+                  `${fin.accent}1A`,
+                  'rgba(255,255,255,0)',
+                  `${fin.accent}1A`,
+                ]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={StyleSheet.absoluteFill}
+              />
+              <View className="flex-row items-center p-4">
+                <View
+                  className="h-16 w-16 items-center justify-center rounded-full"
+                  style={{
+                    shadowColor: fin.accent,
+                    shadowOffset: { width: 0, height: 0 },
+                    shadowOpacity: 0.7,
+                    shadowRadius: 14,
+                    elevation: 7,
+                  }}
+                >
+                  <LinearGradient
+                    colors={fin.gradient}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={[StyleSheet.absoluteFill, { borderRadius: 32 }]}
+                  />
+                  <View
+                    pointerEvents="none"
+                    style={{
+                      position: 'absolute',
+                      top: 5,
+                      left: 12,
+                      right: 12,
+                      height: 8,
+                      borderRadius: 4,
+                      backgroundColor: 'rgba(255,255,255,0.35)',
+                    }}
+                  />
+                  <Ionicons name={fin.arrow as any} size={30} color="#FFFFFF" />
+                </View>
+
+                <View className="ml-3 min-w-0 flex-1">
+                  <Text className="text-[13px] text-white/85">{fin.label}</Text>
+                  <Text
+                    className="text-[34px] font-extrabold leading-[38px] text-white"
+                    numberOfLines={1}
+                  >
+                    {fin.amount}
+                  </Text>
+                  <Text className="text-[12px] text-white/70" numberOfLines={1}>
+                    {fin.sub}
+                  </Text>
+                </View>
+
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  className="ml-2 h-[44px] w-[118px] flex-row items-center justify-center rounded-full border border-white/25 bg-white/10"
+                >
+                  <Text className="mr-1 text-[11px] font-bold text-white">
+                    View details
+                  </Text>
+                  <Ionicons name="chevron-forward" size={13} color="#FFFFFF" />
+                </TouchableOpacity>
+              </View>
+            </GlassShell>
+          </View>
+
+          {/* People / Money flow */}
+          <View className="mb-4">
+            <GlassShell radius={24} blurTarget={backgroundRef}>
+              <View className="px-3 pb-4 pt-4">
+                <View style={{ height: 250 }}>
+                  <View className="flex-1 flex-row items-stretch justify-between gap-1.5">
+                    {/* Left people */}
+                    <View className="flex-[30] justify-between py-1">
+                      {(isGet ? flowLeft : oweLeft).map((p) => (
+                        <View
+                          key={p.name}
+                          className="flex-row items-center rounded-xl border border-white/20 bg-white/10 px-1.5 py-1.5"
+                        >
+                          <View
+                            className="h-9 w-9 items-center justify-center rounded-full border border-white/30"
+                            style={{ backgroundColor: `${p.tint}33` }}
+                          >
+                            <Text className="text-[13px] font-extrabold text-white">
+                              {p.initial}
+                            </Text>
+                          </View>
+                          <View className="ml-1.5 min-w-0 flex-1">
+                            <Text
+                              className="text-[12px] font-bold text-white"
+                              numberOfLines={1}
+                            >
+                              {p.name}
+                            </Text>
+                            <Text
+                              className="text-[14px] font-extrabold"
+                              style={{ color: fin.amountLeft }}
+                              numberOfLines={1}
+                            >
+                              {p.amount}
+                            </Text>
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+
+                    {/* Center user */}
+                    <View className="flex-[34] items-center justify-center">
+                      <View
+                        className="items-center justify-center rounded-full border-2 border-cyan-200/70"
+                        style={{
+                          width: 72,
+                          height: 72,
+                          shadowColor: CYAN,
+                          shadowOffset: { width: 0, height: 0 },
+                          shadowOpacity: 0.65,
+                          shadowRadius: 16,
+                          elevation: 8,
+                        }}
+                      >
+                        <Image
+                          source={require('../../../assets/images/jodtod/people.png')}
+                          resizeMode="cover"
+                          style={{ width: 64, height: 64, borderRadius: 32 }}
+                        />
+                      </View>
+                      <Text className="mt-1.5 text-[13px] font-bold text-white">
+                        You
+                      </Text>
+                    </View>
+
+                    {/* Right people */}
+                    <View className="flex-[30] justify-between py-1">
+                      {(isGet ? flowRight : oweRight).map((p) => (
+                        <View
+                          key={p.name}
+                          className="flex-row items-center rounded-xl border border-white/20 bg-white/10 px-1.5 py-1.5"
+                        >
+                          <View
+                            className="h-9 w-9 items-center justify-center rounded-full border border-white/30"
+                            style={{ backgroundColor: `${p.tint}33` }}
+                          >
+                            <Text className="text-[13px] font-extrabold text-white">
+                              {p.initial}
+                            </Text>
+                          </View>
+                          <View className="ml-1.5 min-w-0 flex-1">
+                            <Text
+                              className="text-[12px] font-bold text-white"
+                              numberOfLines={1}
+                            >
+                              {p.name}
+                            </Text>
+                            <Text
+                              className="text-[14px] font-extrabold"
+                              style={{ color: fin.amountRight }}
+                              numberOfLines={1}
+                            >
+                              {p.amount}
+                            </Text>
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+
+                  {/* Curved glowing connectors */}
+                  <Svg
+                    style={StyleSheet.absoluteFill}
+                    viewBox="0 0 320 250"
+                    preserveAspectRatio="none"
+                    pointerEvents="none"
+                  >
+                    <Defs>
+                      <Marker
+                        id="arrowG"
+                        markerWidth="7"
+                        markerHeight="7"
+                        refX="5"
+                        refY="3.5"
+                        orient="auto"
+                      >
+                        <Path d="M0,0 L7,3.5 L0,7 Z" fill={GREEN} opacity={0.95} />
+                      </Marker>
+                      <Marker
+                        id="arrowC"
+                        markerWidth="7"
+                        markerHeight="7"
+                        refX="5"
+                        refY="3.5"
+                        orient="auto"
+                      >
+                        <Path d="M0,0 L7,3.5 L0,7 Z" fill={CYAN} opacity={0.95} />
+                      </Marker>
+                      <Marker
+                        id="arrowR"
+                        markerWidth="7"
+                        markerHeight="7"
+                        refX="5"
+                        refY="3.5"
+                        orient="auto"
+                      >
+                        <Path d="M0,0 L7,3.5 L0,7 Z" fill="#FB7185" opacity={0.95} />
+                      </Marker>
+                      <Marker
+                        id="arrowO"
+                        markerWidth="7"
+                        markerHeight="7"
+                        refX="5"
+                        refY="3.5"
+                        orient="auto"
+                      >
+                        <Path d="M0,0 L7,3.5 L0,7 Z" fill="#F59E0B" opacity={0.95} />
+                      </Marker>
+                    </Defs>
+                    {fin.pathsLeft.map((c, i) => (
+                      <React.Fragment key={`l${i}`}>
+                        <Path
+                          d={cubicD(c)}
+                          stroke={fin.strokeLeft}
+                          strokeWidth={5}
+                          fill="none"
+                          opacity={0.22}
+                          strokeLinecap="round"
+                        />
+                        <Path
+                          d={cubicD(c)}
+                          stroke={fin.strokeLeft}
+                          strokeWidth={1.5}
+                          fill="none"
+                          opacity={0.9}
+                          strokeLinecap="round"
+                          markerEnd={`url(#${fin.markerLeft})`}
+                        />
+                        <FlowDots
+                          curve={c}
+                          color={fin.particleLeft}
+                          delay={i * 280}
+                        />
+                      </React.Fragment>
+                    ))}
+                    {fin.pathsRight.map((c, i) => (
+                      <React.Fragment key={`r${i}`}>
+                        <Path
+                          d={cubicD(c)}
+                          stroke={fin.strokeRight}
+                          strokeWidth={5}
+                          fill="none"
+                          opacity={0.22}
+                          strokeLinecap="round"
+                        />
+                        <Path
+                          d={cubicD(c)}
+                          stroke={fin.strokeRight}
+                          strokeWidth={1.5}
+                          fill="none"
+                          opacity={0.9}
+                          strokeLinecap="round"
+                          markerEnd={`url(#${fin.markerRight})`}
+                        />
+                        <FlowDots
+                          curve={c}
+                          color={fin.particleRight}
+                          delay={i * 280 + 140}
+                        />
+                      </React.Fragment>
+                    ))}
+                  </Svg>
+                </View>
+              </View>
+            </GlassShell>
+          </View>
+
+          {/* Your Groups */}
+          <View className="mb-4">
+            <SectionHeader title="Your Groups" />
+            <View className="flex-row gap-2.5">
+              {groups.map((group) => (
+                <View key={group.name} className="flex-1">
+                  <GlassShell radius={24} blurTarget={backgroundRef}>
+                    <TouchableOpacity activeOpacity={0.9} className="p-3.5">
+                      <View className="flex-row items-center">
+                        <View
+                          className="h-[52px] w-[52px] items-center justify-center rounded-full border border-white/30"
+                          style={{
+                            backgroundColor: `${group.tint}26`,
+                            shadowColor: group.tint,
+                            shadowOffset: { width: 0, height: 0 },
+                            shadowOpacity: 0.5,
+                            shadowRadius: 8,
+                            elevation: 4,
+                          }}
+                        >
+                          <Ionicons
+                            name={group.icon as any}
+                            size={24}
+                            color="#FFFFFF"
+                          />
+                        </View>
+                        <Ionicons
+                          name="chevron-forward"
+                          size={18}
+                          color="rgba(255,255,255,0.6)"
+                          style={{ marginLeft: 'auto' }}
+                        />
+                      </View>
+                      <Text
+                        className="mt-2.5 text-[16px] font-extrabold text-white"
+                        numberOfLines={1}
+                      >
+                        {group.name}
+                      </Text>
+                      <Text className="mt-0.5 text-[12px] text-white/65">
+                        {group.members}
+                      </Text>
+                      <Text className="mt-0.5 text-[22px] font-extrabold text-white">
+                        {group.amount}
+                      </Text>
+                    </TouchableOpacity>
+                    <LinearGradient
+                      colors={[`${group.tint}30`, 'rgba(255,255,255,0)']}
+                      start={{ x: 0, y: 1 }}
+                      end={{ x: 1, y: 0 }}
+                      pointerEvents="none"
+                      style={[StyleSheet.absoluteFill, { borderRadius: 24 }]}
+                    />
+                  </GlassShell>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          {/* Recent Expenses */}
+          <View className="mb-2">
+            <SectionHeader title="Recent Expenses" />
+            <GlassShell radius={24} blurTarget={backgroundRef}>
+              <View className="px-3.5 py-1.5">
+                {expenses.map((expense, index) => (
+                  <View
+                    key={expense.title}
+                    className="flex-row items-center py-3"
+                    style={
+                      index < expenses.length - 1
+                        ? {
+                            borderBottomWidth: 1,
+                            borderBottomColor: 'rgba(255,255,255,0.08)',
+                          }
+                        : undefined
+                    }
+                  >
+                    <View
+                      className="mr-2.5 h-11 w-11 items-center justify-center rounded-full border border-white/20"
+                      style={{ backgroundColor: `${expense.iconColor}22` }}
+                    >
+                      <Ionicons
+                        name={expense.icon as any}
+                        size={20}
+                        color={expense.iconColor}
+                      />
+                    </View>
+                    <View className="min-w-0 flex-1">
+                      <Text
+                        className="text-[15px] font-bold text-white"
+                        numberOfLines={1}
+                      >
+                        {expense.title}
+                      </Text>
+                      <Text
+                        className="mt-0.5 text-[12px] text-white/60"
+                        numberOfLines={1}
+                      >
+                        {expense.meta}
+                      </Text>
+                    </View>
+                    <View className="ml-2 items-end">
+                      <Text className="text-[17px] font-extrabold text-white">
+                        {expense.amount}
+                      </Text>
+                      <View
+                        className="mt-1 rounded-full border px-2 py-0.5"
+                        style={{
+                          borderColor:
+                            expense.statusStyle === 'paid'
+                              ? 'rgba(52,211,153,0.35)'
+                              : 'rgba(255,255,255,0.2)',
+                          backgroundColor:
+                            expense.statusStyle === 'paid'
+                              ? 'rgba(52,211,153,0.14)'
+                              : 'rgba(255,255,255,0.08)',
+                        }}
+                      >
+                        <Text
+                          className="text-[12px] font-semibold"
+                          style={{
+                            color:
+                              expense.statusStyle === 'paid'
+                                ? GREEN
+                                : 'rgba(255,255,255,0.75)',
+                          }}
+                        >
+                          {expense.status}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </GlassShell>
           </View>
         </ScrollView>
       </SafeAreaView>

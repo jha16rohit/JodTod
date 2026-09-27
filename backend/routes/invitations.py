@@ -16,6 +16,7 @@ from backend.database import get_db
 from backend.dependencies.auth import get_current_user
 from backend.models.user import User
 from backend.schemas.invitations import (
+    CreateInvitationRequest,
     GroupInvitationListResponse,
     GroupInvitationResponse,
 )
@@ -43,6 +44,32 @@ async def list_my_invitations(
     return GroupInvitationListResponse(
         invitations=[GroupInvitationResponse.model_validate(r) for r in rows]
     )
+
+
+@router.post(
+    "",
+    response_model=GroupInvitationResponse,
+)
+async def create_invitation(
+    payload: CreateInvitationRequest,
+    identity: Annotated[User, Depends(get_current_user)],
+    db: AsyncSession = Depends(get_db, use_cache=False),
+) -> GroupInvitationResponse:
+    """Create a group invitation for another user."""
+    try:
+        row = await GroupInvitationService.create_invitation(
+            db,
+            invitee_user_id=payload.invitee_user_id,
+            group_name=payload.group_name,
+            invite_code=payload.invite_code,
+            invited_by=payload.invited_by,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    return GroupInvitationResponse.model_validate(row)
 
 
 @router.post(

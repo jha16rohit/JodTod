@@ -336,3 +336,42 @@ Then start the backend and confirm `GET /health` works. Make sure the diff conta
 ## 10. Never commit
 
 `backend/.env`, JWT secrets, database passwords, OAuth secrets, Apple private keys, tokens, or anything from your local machine. Keep placeholders only in `.env.example`.
+
+---
+
+## Add Expense Flow Dependencies
+
+### expo-image-picker
+
+Purpose:
+Used for the Add Expense bill/receipt image flow, including opening the device camera/image picker and handling the captured receipt image.
+
+Installation:
+
+```bash
+npx expo install expo-image-picker
+```
+
+## Add Member + Group Invitation + QR Join Dependencies
+
+### expo-camera
+
+Purpose:
+Used for the Scan QR to Join flow. Opens the real device camera, requests camera permission, and scans JodTod group invite QR codes (`onBarcodeScanned` with `qr` barcode type). Handles permission denied, cancel, invalid QR, and rescan.
+
+Installation:
+
+```bash
+npx expo install expo-camera
+```
+
+### react-native-qrcode-svg
+
+Purpose:
+Used to render a group's shareable invite QR code on the group Invite screen. Pure JavaScript (draws with the already-installed `react-native-svg`, no native code). Encodes only the opaque group join link (`jodtod://join-group?token=...`), never member lists, expenses, or balances.
+
+Installation:
+
+```bash
+npx expo install react-native-qrcode-svg
+```
