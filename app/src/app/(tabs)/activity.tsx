@@ -1039,7 +1039,6 @@ function MainScreen({
           contentContainerClassName="px-5"
           style={{ flexGrow: 0, flexShrink: 0, height: 40 }}
         >
-          {" "}
           {filters
             .filter((f) => f.key !== "group")
             .map((f, index, list) => {
@@ -1886,7 +1885,6 @@ function MemberScreen({
           contentContainerClassName="px-5"
           style={{ flexGrow: 0, flexShrink: 0, height: 40 }}
         >
-          {" "}
           {filters
             .filter((f) => f.key !== "member")
             .map((t, index, list) => {

@@ -8,6 +8,7 @@ import * as NavigationBar from "expo-navigation-bar";
 
 import { AuthProvider } from "../context/AuthContext";
 import OfflineIndicator from "../components/auth/OfflineIndicator";
+import PendingSettlementGate from "../components/settlements/SettlementConfirmDialog";
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -61,6 +62,7 @@ export default function RootLayout() {
         <Stack.Screen name="(tabs)" />
       </Stack>
       <OfflineIndicator />
+      <PendingSettlementGate />
     </AuthProvider>
   );
 }

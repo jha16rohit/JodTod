@@ -30,7 +30,7 @@ def get_base_url() -> str:
     url = os.getenv("JODTOD_API_URL")
     if url:
         return url.rstrip("/")
-    return "http://127.0.0.1:5000"
+    return "http://127.0.0.1:5001"
 
 
 def print_result(name: str, passed: bool, message: str) -> None:

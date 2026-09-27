@@ -1,71 +1,135 @@
-import { useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 
+import { BubbleBackdrop, ScreenHeader, colors } from '@/components/groups/ui';
+import { FilterTabs } from '@/components/groups/FilterTabs';
+import { ExpenseRow, groupExpensesByDate } from '@/components/groups/ExpenseRow';
+import { useAuth } from '@/context/AuthContext';
 import {
-  BubbleBackdrop,
-  ScreenHeader,
-  colors,
-  inr,
-} from '@/components/groups/ui';
-import { getGroup, Expense } from '@/lib/mockGroups';
+  fetchGroupDetail,
+  fetchGroupExpenses,
+  type Expense as ApiExpense,
+} from '@/services/groups.api';
+import { expensesOf } from '@/lib/groupAdapters';
+import type { Expense } from '@/lib/mockGroups';
 
 type FilterTab = 'All' | 'My Expenses' | 'By Day' | 'By Category';
-const TABS: FilterTab[] = ['All', 'My Expenses', 'By Day', 'By Category'];
-
-const ICONS: Record<Expense['icon'], { icon: keyof typeof Ionicons.glyphMap; colors: [string, string] }> = {
-  restaurant: { icon: 'restaurant', colors: ['#FF9A8B', '#FF6A88'] },
-  flash: { icon: 'flash', colors: ['#F6D365', '#FDA085'] },
-  film: { icon: 'film', colors: ['#A18CD1', '#FBC2EB'] },
-  bed: { icon: 'bed', colors: ['#4FACFE', '#00A9E0'] },
-  car: { icon: 'car', colors: ['#84FAB0', '#8FD3F4'] },
-};
+const TABS: readonly FilterTab[] = ['All', 'My Expenses', 'By Day', 'By Category'];
+const PAGE = 50;
 
 export default function GroupExpenses() {
-  const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const group = getGroup(id as string);
+  const { user } = useAuth();
+  const groupId = Array.isArray(id) ? id[0] : (id as string);
   const [tab, setTab] = useState<FilterTab>('All');
+  const [groupName, setGroupName] = useState('Expenses');
+  const [rows, setRows] = useState<ApiExpense[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const loadPage = useCallback(async (offset: number) => {
+    if (!groupId) {
+      setError('Group not found.');
+      setLoading(false);
+      return;
+    }
+    if (offset === 0) {
+      setLoading(true);
+      setError(null);
+    } else {
+      setLoadingMore(true);
+    }
+    try {
+      // Group name + one expense page in parallel (independent).
+      const [group, page] = offset === 0
+        ? await Promise.all([fetchGroupDetail(groupId), fetchGroupExpenses(groupId, PAGE, 0)])
+        : [null, await fetchGroupExpenses(groupId, PAGE, offset)];
+      if (!mountedRef.current) return;
+      if (offset === 0) {
+        if (!group) {
+          setError('Group not found.');
+          setRows([]);
+          return;
+        }
+        setGroupName(group.name);
+      }
+      setRows((prev) => (offset === 0 ? page.expenses : [...prev, ...page.expenses]));
+      setTotal(page.total);
+    } catch (e) {
+      if (!mountedRef.current) return;
+      if (offset === 0) {
+        setError(e instanceof Error ? e.message : 'Could not load expenses.');
+        setRows([]);
+      }
+    } finally {
+      if (mountedRef.current) {
+        setLoading(false);
+        setLoadingMore(false);
+      }
+    }
+  }, [groupId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      mountedRef.current = true;
+      void loadPage(0);
+      return () => {
+        mountedRef.current = false;
+      };
+    }, [loadPage]),
+  );
+
+  const myId = user?.id ?? null;
+  const all: Expense[] = useMemo(() => expensesOf(rows, myId), [rows, myId]);
 
   const expenses = useMemo(() => {
-    if (!group) return [];
-    if (tab === 'My Expenses') return group.expenses.filter((e) => e.paidBy === 'you');
-    return group.expenses;
-  }, [group, tab]);
-
-  if (!group) return null;
+    if (tab === 'My Expenses') return all.filter((e) => e.paidBy === 'you');
+    return all;
+  }, [all, tab]);
 
   return (
     <BubbleBackdrop>
-      <ScreenHeader title={group.name} subtitle="Expenses" rightIcon="add" onRightPress={() => {}} />
+      <ScreenHeader title={groupName} subtitle="Expenses" rightIcon="add" onRightPress={() => {}} />
 
       <View className="px-5">
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 14 }}>
-          {TABS.map((t) => {
-            const active = t === tab;
-            return (
-              <TouchableOpacity
-                key={t}
-                onPress={() => setTab(t)}
-                className="px-4 h-9 rounded-full items-center justify-center border"
-                style={{
-                  backgroundColor: active ? colors.brand : 'rgba(255,255,255,0.5)',
-                  borderColor: active ? colors.brand : colors.inputBorder,
-                }}
-              >
-                <Text className="text-[13px] font-semibold" style={{ color: active ? '#fff' : colors.textMuted }}>
-                  {t}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+        <FilterTabs tabs={TABS} value={tab} onChange={setTab} />
       </View>
 
       <ScrollView className="flex-1 px-5" contentContainerStyle={{ paddingBottom: 100 }}>
-        {expenses.length === 0 ? (
+        {loading ? (
+          <View className="items-center justify-center mt-20">
+            <ActivityIndicator size="small" color={colors.textDark} />
+            <Text className="mt-3 text-sm" style={{ color: colors.textMuted }}>
+              Loading expenses…
+            </Text>
+          </View>
+        ) : error ? (
+          <View className="items-center justify-center mt-20">
+            <Text className="text-sm" style={{ color: colors.textMuted }}>
+              {error}
+            </Text>
+            <TouchableOpacity
+              onPress={() => void loadPage(0)}
+              activeOpacity={0.7}
+              className="mt-4 rounded-full px-5 py-2.5"
+              style={{ backgroundColor: colors.brandDark }}
+            >
+              <Text className="text-[13px] font-bold text-white">Retry</Text>
+            </TouchableOpacity>
+          </View>
+        ) : expenses.length === 0 ? (
           <View className="items-center justify-center mt-20">
             <Ionicons name="receipt-outline" size={40} color={colors.textMuted} />
             <Text className="mt-3 text-sm" style={{ color: colors.textMuted }}>
@@ -73,54 +137,38 @@ export default function GroupExpenses() {
             </Text>
           </View>
         ) : (
-          groupByDate(expenses).map(([date, items]) => (
+          groupExpensesByDate(expenses).map(([date, items]) => (
             <View key={date} style={{ marginBottom: 18 }}>
               <Text className="text-[12px] font-bold mb-2" style={{ color: colors.textMuted }}>
                 {date}
               </Text>
               <View style={{ gap: 10 }}>
                 {items.map((e) => (
-                  <TouchableOpacity key={e.id} activeOpacity={0.8}>
-                    <View
-                      className="flex-row items-center justify-between rounded-2xl border border-white/50 px-4 py-3.5"
-                      style={{ backgroundColor: 'rgba(255,255,255,0.6)' }}
-                    >
-                      <View className="flex-row items-center gap-3 flex-1">
-                        <LinearGradient
-                          colors={ICONS[e.icon].colors}
-                          style={{ width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }}
-                        >
-                          <Ionicons name={ICONS[e.icon].icon} size={19} color="#fff" />
-                        </LinearGradient>
-                        <View className="flex-1">
-                          <Text className="text-sm font-bold" style={{ color: colors.textDark }} numberOfLines={1}>
-                            {e.title}
-                          </Text>
-                          <Text className="text-[12px]" style={{ color: colors.textMuted }}>
-                            Paid by {e.paidBy === 'you' ? 'you' : e.paidBy} • {e.splitCount} people
-                          </Text>
-                        </View>
-                      </View>
-                      <Text className="text-[15px] font-extrabold" style={{ color: colors.textDark }}>
-                        {inr(e.amount)}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
+                  <ExpenseRow key={e.id} expense={e} />
                 ))}
               </View>
             </View>
           ))
         )}
+
+        {!loading && !error && rows.length < total ? (
+          <TouchableOpacity
+            activeOpacity={0.8}
+            disabled={loadingMore}
+            onPress={() => void loadPage(rows.length)}
+            className="mt-2 items-center rounded-full border-2 py-3"
+            style={{ borderColor: colors.brandDark }}
+          >
+            {loadingMore ? (
+              <ActivityIndicator size="small" color={colors.brandDark} />
+            ) : (
+              <Text className="text-[13px] font-bold" style={{ color: colors.brandDark }}>
+                Load more ({total - rows.length} remaining)
+              </Text>
+            )}
+          </TouchableOpacity>
+        ) : null}
       </ScrollView>
     </BubbleBackdrop>
   );
-}
-
-function groupByDate(expenses: Expense[]) {
-  const map = new Map<string, Expense[]>();
-  for (const e of expenses) {
-    if (!map.has(e.date)) map.set(e.date, []);
-    map.get(e.date)!.push(e);
-  }
-  return Array.from(map.entries());
 }

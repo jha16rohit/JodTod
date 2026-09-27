@@ -1,37 +1,83 @@
-import { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Modal } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, Modal, ActivityIndicator } from 'react-native';
+import { useFocusEffect, useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
-import {
-  BubbleBackdrop,
-  ScreenHeader,
-  GlassCard,
-  Avatar,
-  colors,
-} from '@/components/groups/ui';
-import { getGroup, Member } from '@/lib/mockGroups';
+import { BubbleBackdrop, ScreenHeader, GlassCard, colors } from '@/components/groups/ui';
+import { MemberRow, SheetMenuItem } from '@/components/groups/MemberRow';
+import { useAuth } from '@/context/AuthContext';
+import { fetchGroupDetail, type GroupDetail } from '@/services/groups.api';
+import { membersOf } from '@/lib/groupAdapters';
+import type { Member } from '@/lib/mockGroups';
 
 export default function GroupMembers() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const group = getGroup(id as string);
+  const { user } = useAuth();
+  const groupId = Array.isArray(id) ? id[0] : (id as string);
   const [menuFor, setMenuFor] = useState<Member | null>(null);
+  const [detail, setDetail] = useState<GroupDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  if (!group) return null;
-  const base = `/(tabs)/groups/${group.id}`;
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const load = useCallback(async () => {
+    if (!groupId) {
+      setError('Group not found.');
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const group = await fetchGroupDetail(groupId);
+      if (!mountedRef.current) return;
+      if (!group) {
+        setError('Group not found.');
+        setDetail(null);
+      } else {
+        setDetail(group);
+      }
+    } catch (e) {
+      if (!mountedRef.current) return;
+      setError(e instanceof Error ? e.message : 'Could not load members.');
+      setDetail(null);
+    } finally {
+      if (mountedRef.current) setLoading(false);
+    }
+  }, [groupId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      mountedRef.current = true;
+      void load();
+      return () => {
+        mountedRef.current = false;
+      };
+    }, [load]),
+  );
+
+  const base = `/(tabs)/groups/${groupId}`;
+  const members = detail ? membersOf(detail, user?.id ?? null) : [];
 
   return (
     <BubbleBackdrop>
       <ScreenHeader
         title="Members"
         rightIcon="person-add-outline"
-        onRightPress={() => router.push(`${base}/invites` as any)}
+        onRightPress={() => router.push(`${base}/invite` as any)}
       />
 
       <ScrollView className="flex-1 px-5" contentContainerStyle={{ paddingBottom: 40 }}>
         {/* Invite banner */}
-        <TouchableOpacity activeOpacity={0.85} onPress={() => router.push(`${base}/invites` as any)}>
+        <TouchableOpacity activeOpacity={0.85} onPress={() => router.push(`${base}/invite` as any)}>
           <View
             className="flex-row items-center rounded-2xl px-4 py-3.5 mb-5"
             style={{ backgroundColor: colors.successBg }}
@@ -50,44 +96,41 @@ export default function GroupMembers() {
           </View>
         </TouchableOpacity>
 
-        <GlassCard>
-          <View style={{ paddingHorizontal: 16 }}>
-            {group.members.map((m, i) => (
-              <View
-                key={m.id}
-                className="flex-row items-center justify-between py-3.5"
-                style={{
-                  borderBottomWidth: i === group.members.length - 1 ? 0 : 1,
-                  borderBottomColor: 'rgba(255,255,255,0.5)',
-                }}
-              >
-                <View className="flex-row items-center gap-3 flex-1">
-                  <Avatar name={m.name} size={42} />
-                  <View className="flex-1">
-                    <View className="flex-row items-center gap-2">
-                      <Text className="text-sm font-bold" style={{ color: colors.textDark }}>
-                        {m.name} {m.isYou ? '(You)' : ''}
-                      </Text>
-                      <RoleBadge role={m.role} />
-                    </View>
-                    <Text className="text-[12px]" style={{ color: colors.textMuted }} numberOfLines={1}>
-                      {m.email}
-                    </Text>
-                  </View>
-                </View>
-
-                {!m.isYou && (
-                  <TouchableOpacity onPress={() => setMenuFor(m)} className="p-2">
-                    <Ionicons name="ellipsis-vertical" size={17} color={colors.textMuted} />
-                  </TouchableOpacity>
-                )}
-              </View>
-            ))}
+        {loading ? (
+          <View className="items-center py-12">
+            <ActivityIndicator size="small" color={colors.textDark} />
           </View>
-        </GlassCard>
+        ) : error || !detail ? (
+          <View className="items-center py-12">
+            <Text className="text-[14px]" style={{ color: colors.textMuted }}>
+              {error ?? 'Group not found'}
+            </Text>
+            <TouchableOpacity
+              onPress={() => void load()}
+              activeOpacity={0.7}
+              className="mt-4 rounded-full px-5 py-2.5"
+              style={{ backgroundColor: colors.brandDark }}
+            >
+              <Text className="text-[13px] font-bold text-white">Retry</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <GlassCard>
+            <View style={{ paddingHorizontal: 16 }}>
+              {members.map((m, i) => (
+                <MemberRow
+                  key={m.id}
+                  member={m}
+                  isLast={i === members.length - 1}
+                  onMenuPress={setMenuFor}
+                />
+              ))}
+            </View>
+          </GlassCard>
+        )}
       </ScrollView>
 
-      {/* Manage-member action sheet */}
+      {/* Manage-member action sheet (display only: role changes land with moderation tooling) */}
       <Modal visible={!!menuFor} transparent animationType="fade" onRequestClose={() => setMenuFor(null)}>
         <TouchableOpacity
           activeOpacity={1}
@@ -99,44 +142,12 @@ export default function GroupMembers() {
             <Text className="text-base font-bold mb-4" style={{ color: colors.textDark }}>
               {menuFor?.name}
             </Text>
-            <MenuItem icon="shield-checkmark-outline" label="Make Co-Admin" onPress={() => setMenuFor(null)} />
-            <MenuItem icon="person-remove-outline" label="Remove from group" danger onPress={() => setMenuFor(null)} />
-            <MenuItem icon="close" label="Cancel" onPress={() => setMenuFor(null)} />
+            <SheetMenuItem icon="shield-checkmark-outline" label="Make Co-Admin" onPress={() => setMenuFor(null)} />
+            <SheetMenuItem icon="person-remove-outline" label="Remove from group" danger onPress={() => setMenuFor(null)} />
+            <SheetMenuItem icon="close" label="Cancel" onPress={() => setMenuFor(null)} />
           </View>
         </TouchableOpacity>
       </Modal>
     </BubbleBackdrop>
-  );
-}
-
-function RoleBadge({ role }: { role: Member['role'] }) {
-  const isYouAdmin = role === 'Admin';
-  return (
-    <View className="px-2 py-0.5 rounded-full" style={{ backgroundColor: isYouAdmin ? colors.successBg : colors.neutralBg }}>
-      <Text className="text-[10px] font-bold" style={{ color: isYouAdmin ? colors.brandDark : colors.textMuted }}>
-        {role}
-      </Text>
-    </View>
-  );
-}
-
-function MenuItem({
-  icon,
-  label,
-  onPress,
-  danger,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  onPress: () => void;
-  danger?: boolean;
-}) {
-  return (
-    <TouchableOpacity onPress={onPress} className="flex-row items-center gap-3 py-3">
-      <Ionicons name={icon} size={18} color={danger ? colors.danger : colors.textDark} />
-      <Text className="text-sm font-semibold" style={{ color: danger ? colors.danger : colors.textDark }}>
-        {label}
-      </Text>
-    </TouchableOpacity>
   );
 }

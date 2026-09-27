@@ -5,13 +5,22 @@ import {
   TouchableOpacity,
   ScrollView,
   Modal,
+  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
-import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import {
+  fetchProfileDashboard,
+  resolvePhotoUrl,
+  type ProfileDashboard,
+} from "../services/profile.api";
+import { useProfilePhoto } from "../hooks/useProfilePhoto";
+import { ProfilePhotoSheet } from "../components/profile/ProfilePhotoSheet";
+import { fetchPreferences } from "../services/preferences.api";
 
 type MenuItemProps = {
   icon: keyof typeof Ionicons.glyphMap;
@@ -19,6 +28,8 @@ type MenuItemProps = {
   subtitle: string;
   onPress: () => void;
 };
+
+const PHOTO_PLACEHOLDER = require("../../assets/images/jodtod/people.png");
 
 function GlassCard({
   children,
@@ -66,11 +77,88 @@ function Divider() {
   return <View className="mx-4 h-px bg-white/40" />;
 }
 
+function StatCell({ value, label, loading }: { value: number; label: string; loading: boolean }) {
+  return (
+    <View className="flex-1 items-center py-5">
+      <Text className="text-[22px] font-extrabold text-[#0B3D62]">
+        {loading ? "…" : String(value)}
+      </Text>
+
+      <Text className="mt-1 text-[11px] font-medium text-[#4B5A66]">
+        {label}
+      </Text>
+    </View>
+  );
+}
+
 export default function Profile() {
   const router = useRouter();
   const { user, logout } = useAuth();
 
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+
+  const [dashboard, setDashboard] = useState<ProfileDashboard | null>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  // Display-name choice (account_name | username); cached prefs load
+  // best-effort so My Profile never blocks on it.
+  const [displayChoice, setDisplayChoice] = useState<string>("account_name");
+
+  // Local override set immediately after upload/remove so the new photo
+  // shows without waiting for a refetch. Null means "no override".
+  // `undefined` is never stored — absence of override is `overrideSet`.
+  const [avatarOverride, setAvatarOverride] = useState<string | null | undefined>(undefined);
+
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const loadProfile = useCallback(async () => {
+    if (mountedRef.current) {
+      setProfileLoading(true);
+      setProfileError(null);
+    }
+    try {
+      const data = await fetchProfileDashboard();
+      if (!mountedRef.current) return;
+      setDashboard(data);
+      // Fresh server state wins over any stale local override.
+      setAvatarOverride(undefined);
+      // Display-name preference (best-effort; failure keeps default).
+      try {
+        const prefs = await fetchPreferences();
+        if (mountedRef.current) setDisplayChoice(prefs.display_name);
+      } catch {
+        // Keep the default presentation.
+      }
+    } catch (e) {
+      if (!mountedRef.current) return;
+      setProfileError(
+        e instanceof Error ? e.message : "Could not load your profile.",
+      );
+    } finally {
+      if (mountedRef.current) setProfileLoading(false);
+    }
+  }, []);
+
+  // SINGLE loading trigger: useFocusEffect.
+  //
+  // useFocusEffect already fires on the FIRST focus as well as on every
+  // later one, so a second useEffect(() => loadProfile()) call would
+  // deterministically duplicate the very first request (two concurrent
+  // /profile + two /preferences fetches on open). One trigger only:
+  //   opened  -> one load
+  // revisited -> one load (so edits saved on Personal Information /
+  //                Edit Profile are visible here at once)
+  useFocusEffect(
+    useCallback(() => {
+      void loadProfile();
+    }, [loadProfile]),
+  );
 
   const handleLogout = () => {
     setShowLogoutConfirm(true);
@@ -86,6 +174,39 @@ export default function Profile() {
     router.replace("/login");
   };
 
+  // ---------------------------------------------------------------
+  // Photo source: fresh dashboard first, cached auth user fallback.
+  // ---------------------------------------------------------------
+  const storedAvatar =
+    avatarOverride !== undefined
+      ? avatarOverride
+      : (dashboard?.profile.avatar_url ?? user?.avatar_url ?? null);
+  const photoUrl = resolvePhotoUrl(storedAvatar);
+  // Primary display name follows the Display Name preference:
+  // "username" shows @username when one exists, otherwise the
+  // account name. Both fields stay stored; only presentation changes.
+  const accountName =
+    dashboard?.profile.name?.trim() || user?.name?.trim() || "";
+  const username =
+    dashboard?.profile.username?.trim() || user?.username?.trim() || "";
+  const displayName =
+    displayChoice === "username" && username ? `@${username}` : accountName;
+  const displayContact =
+    dashboard?.profile.email ??
+    dashboard?.profile.phone ??
+    user?.email ??
+    user?.phone ??
+    "";
+
+  // ---------------------------------------------------------------
+  // Photo flow: shared Page 01 system (hook owns permissions, upload,
+  // removal, loading, and errors; this screen owns the displayed URL).
+  // ---------------------------------------------------------------
+  const photo = useProfilePhoto({
+    hasPhoto: photoUrl !== null,
+    onAvatarChanged: (avatarUrl) => setAvatarOverride(avatarUrl),
+  });
+
   return (
     <View className="flex-1">
       {/* =========================================================
@@ -95,7 +216,7 @@ export default function Profile() {
       ========================================================= */}
 
       <Image
-        source={require("../../assets/images/jodtod/background_animation.png")}
+        source={require("../../assets/images/jodtod/background_home.png")}
         resizeMode="cover"
         className="absolute inset-0 h-full w-full"
       />
@@ -127,18 +248,13 @@ export default function Profile() {
             </TouchableOpacity>
 
             {/* Title */}
-            <Text className="text-[22px] font-extrabold text-[#0B3D62]">
+            <Text className="flex-1 text-center text-[22px] font-extrabold text-[#0B3D62]">
               My Profile
             </Text>
 
-            {/* Edit */}
-            <TouchableOpacity
-              onPress={() => router.push("/edit-profile")}
-              activeOpacity={0.8}
-              className="rounded-full bg-[#00B894] px-5 py-2.5"
-            >
-              <Text className="text-[14px] font-bold text-white">Edit</Text>
-            </TouchableOpacity>
+            {/* Spacer keeps the header balanced now that editing
+                lives in Personal Information (no Edit button here). */}
+            <View className="h-11 w-11" />
           </View>
 
           {/* =======================================================
@@ -148,15 +264,22 @@ export default function Profile() {
           <View className="items-center pt-8">
             {/* Avatar container */}
             <View className="relative">
-              <Image
-                source={require("../../assets/images/jodtod/people.png")}
-                resizeMode="cover"
-                className="h-36 w-36 rounded-full border-4 border-white/70"
-              />
+              {profileLoading && !displayName && !photoUrl ? (
+                <View className="h-36 w-36 items-center justify-center rounded-full border-4 border-white/70 bg-white/40">
+                  <ActivityIndicator size="large" color="#0B3D62" />
+                </View>
+              ) : (
+                <Image
+                  source={photoUrl ? { uri: photoUrl } : PHOTO_PLACEHOLDER}
+                  resizeMode="cover"
+                  className="h-36 w-36 rounded-full border-4 border-white/70"
+                />
+              )}
 
-              {/* Camera button */}
+              {/* Camera button — opens Take Photo / Choose from Gallery */}
               <TouchableOpacity
                 activeOpacity={0.8}
+                onPress={() => photo.setShowSheet(true)}
                 className="absolute bottom-0 right-0 h-11 w-11 items-center justify-center rounded-full border-2 border-white bg-white/80"
               >
                 <Ionicons name="camera-outline" size={20} color="#0B3D62" />
@@ -165,70 +288,72 @@ export default function Profile() {
 
             {/* Name */}
             <Text className="mt-5 text-[28px] font-extrabold text-[#0B3D62]">
-              {user?.name?.trim() || ""}
+              {displayName}
             </Text>
 
             {/* Email */}
             <Text className="mt-1 text-[15px] font-medium text-[#2A5A82]">
-              {user?.email ?? user?.phone ?? ""}
+              {displayContact}
             </Text>
+
+            {/* Load / error state (empty data shows real zeros below) */}
+            {profileError ? (
+              <View className="mt-3 items-center rounded-2xl border border-red-300/60 bg-white/60 px-4 py-3">
+                <Text className="text-[13px] font-medium text-red-600">
+                  {profileError}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => void loadProfile()}
+                  activeOpacity={0.7}
+                  className="mt-2 rounded-full bg-[#0B3D62] px-4 py-2"
+                >
+                  <Text className="text-[13px] font-bold text-white">
+                    Retry
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
           </View>
 
           {/* =======================================================
-            STATISTICS
+            STATISTICS (real backend counts; 0 until those modules land)
         ======================================================= */}
 
           <GlassCard className="mt-7">
             <View className="flex-row">
               {/* Groups */}
-              <View className="flex-1 items-center py-5">
-                <Text className="text-[22px] font-extrabold text-[#0B3D62]">
-                  5
-                </Text>
-
-                <Text className="mt-1 text-[11px] font-medium text-[#4B5A66]">
-                  Groups
-                </Text>
-              </View>
+              <StatCell
+                value={dashboard?.groups.count ?? 0}
+                label="Groups"
+                loading={profileLoading && !dashboard}
+              />
 
               <View className="my-4 w-px bg-white/50" />
 
               {/* Expenses */}
-              <View className="flex-1 items-center py-5">
-                <Text className="text-[22px] font-extrabold text-[#0B3D62]">
-                  24
-                </Text>
-
-                <Text className="mt-1 text-[11px] font-medium text-[#4B5A66]">
-                  Expenses
-                </Text>
-              </View>
+              <StatCell
+                value={dashboard?.expenses.count ?? 0}
+                label="Expenses"
+                loading={profileLoading && !dashboard}
+              />
 
               <View className="my-4 w-px bg-white/50" />
 
               {/* Trips */}
-              <View className="flex-1 items-center py-5">
-                <Text className="text-[22px] font-extrabold text-[#0B3D62]">
-                  3
-                </Text>
-
-                <Text className="mt-1 text-[11px] font-medium text-[#4B5A66]">
-                  Trips
-                </Text>
-              </View>
+              <StatCell
+                value={dashboard?.trips.count ?? 0}
+                label="Trips"
+                loading={profileLoading && !dashboard}
+              />
 
               <View className="my-4 w-px bg-white/50" />
 
               {/* Settlements */}
-              <View className="flex-1 items-center py-5">
-                <Text className="text-[22px] font-extrabold text-[#0B3D62]">
-                  2
-                </Text>
-
-                <Text className="mt-1 text-[11px] font-medium text-[#4B5A66]">
-                  Settlements
-                </Text>
-              </View>
+              <StatCell
+                value={dashboard?.settlements.count ?? 0}
+                label="Settlements"
+                loading={profileLoading && !dashboard}
+              />
             </View>
           </GlassCard>
 
@@ -267,12 +392,12 @@ export default function Profile() {
 
             <Divider />
 
-            {/* App Settings */}
+            {/* People & Settlements */}
             <MenuItem
-              icon="settings-outline"
-              title="App Settings"
-              subtitle="Language, privacy, data"
-              onPress={() => router.push("/app-settings")}
+              icon="people-outline"
+              title="People & Settlements"
+              subtitle="See who you owe or who owes you"
+              onPress={() => router.push("/people-settlements")}
             />
 
             <Divider />
@@ -315,6 +440,20 @@ export default function Profile() {
           </TouchableOpacity>
         </ScrollView>
       </SafeAreaView>
+
+      {/* =========================================================
+          PHOTO ACTION SHEET — shared Page 01 flow
+      ========================================================= */}
+
+      <ProfilePhotoSheet
+        visible={photo.showSheet}
+        uploading={photo.uploading}
+        hasPhoto={photoUrl !== null}
+        onTakePhoto={() => void photo.takePhoto()}
+        onChooseFromGallery={() => void photo.chooseFromGallery()}
+        onRemovePhoto={photo.removePhoto}
+        onClose={() => photo.setShowSheet(false)}
+      />
 
       {/* =========================================================
           LOGOUT CONFIRMATION

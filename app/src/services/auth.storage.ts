@@ -75,9 +75,26 @@ async function safeSecureDelete(key: string): Promise<void> {
 // Tokens (SecureStore only)
 // ---------------------------------------------------------------------------
 
+/**
+ * In-memory mirror of the persisted tokens.
+ *
+ * SecureStore is the source of truth: it is encrypted at rest and is
+ * never bypassed. The mirror exists purely for read latency — every
+ * authenticated request reads the access token, and an Android SecureStore
+ * read is a JNI/keystore round trip per key, so awaiting three of them on
+ * every request adds avoidable latency to each API call.
+ *
+ * Invariants:
+ * - Populated once on first read (cold start / reload).
+ * - Rewritten atomically by saveAuthTokens and cleared by clearAuthTokens,
+ *   so it can never drift from SecureStore.
+ * - Lives in memory only; never persisted anywhere else.
+ */
+let tokenMirror: StoredAuthTokens | null = null;
+
 export async function saveAuthTokens(input: SaveAuthTokensInput): Promise<void> {
   if (!input.accessToken || !input.refreshToken) {
-    throw new AuthStorageError("Cannot persist incomplete auth tokens.");
+    throw new AuthStorageError('Cannot persist incomplete auth tokens.');
   }
   await safeSecureSet(AUTH_STORAGE_KEYS.ACCESS_TOKEN, input.accessToken);
   await safeSecureSet(AUTH_STORAGE_KEYS.REFRESH_TOKEN, input.refreshToken);
@@ -86,14 +103,33 @@ export async function saveAuthTokens(input: SaveAuthTokensInput): Promise<void> 
   } else {
     await safeSecureDelete(AUTH_STORAGE_KEYS.SESSION_ID);
   }
+  tokenMirror = {
+    accessToken: input.accessToken,
+    refreshToken: input.refreshToken,
+    sessionId: input.sessionId ?? null,
+  };
 }
 
 export async function getAuthTokens(): Promise<StoredAuthTokens> {
+  if (tokenMirror) {
+    return tokenMirror;
+  }
+
   const [accessToken, refreshToken, sessionId] = await Promise.all([
     safeSecureGet(AUTH_STORAGE_KEYS.ACCESS_TOKEN),
     safeSecureGet(AUTH_STORAGE_KEYS.REFRESH_TOKEN),
     safeSecureGet(AUTH_STORAGE_KEYS.SESSION_ID),
   ]);
+
+  /**
+   * Only memoize a real session. An empty read happens on first launch
+   * (before login) or on a wiped keystore; caching that would make a
+   * later successful login invisible until the process restarts.
+   */
+  if (accessToken || refreshToken) {
+    tokenMirror = { accessToken, refreshToken, sessionId };
+  }
+
   return { accessToken, refreshToken, sessionId };
 }
 
@@ -103,6 +139,7 @@ export async function clearAuthTokens(): Promise<void> {
     safeSecureDelete(AUTH_STORAGE_KEYS.REFRESH_TOKEN),
     safeSecureDelete(AUTH_STORAGE_KEYS.SESSION_ID),
   ]);
+  tokenMirror = null;
 }
 
 /**

@@ -7,11 +7,19 @@ import Animated, {
   withTiming,
   Easing,
 } from 'react-native-reanimated';
-import { useRouter } from 'expo-router';
 import { Asset } from 'expo-asset';
 
-export default function AnimatedIntro({ autoNavigate = true }: { autoNavigate?: boolean }) {
-  const router = useRouter();
+export default function AnimatedIntro({
+  onAssetsReady,
+}: {
+  /**
+   * Fired once the preloaded onboarding assets have SETTLED (loaded or
+   * failed). This is a real readiness signal, so the root route can
+   * navigate the instant auth restoration finishes instead of waiting
+   * out a fixed multi-second delay.
+   */
+  onAssetsReady?: () => void;
+}) {
   const hasStarted = useRef(false);
 
   // Animation values
@@ -39,6 +47,10 @@ export default function AnimatedIntro({ autoNavigate = true }: { autoNavigate?: 
       require('../../../assets/images/jodtod/settle-up.png'),
     ]).catch((error) => {
       console.warn('Failed to preload onboarding assets:', error);
+    }).then(() => {
+      // Reported on BOTH outcomes: a failed asset must never leave the
+      // root route waiting forever.
+      onAssetsReady?.();
     });
 
     // =========================================
@@ -98,20 +110,15 @@ export default function AnimatedIntro({ autoNavigate = true }: { autoNavigate?: 
     );
 
     // =========================================
-    // GO TO ONBOARDING (only when self-navigating; the root index route
-    // passes autoNavigate={false} and decides based on auth state)
+    // NAVIGATION
+    //
+    // This component is purely presentational. It no longer navigates
+    // itself: the previous 3700 ms setTimeout was an unconditional
+    // artificial floor on every cold start, and the root index route now
+    // navigates the moment auth restoration and asset readiness are
+    // both real (see app/src/app/index.tsx).
     // =========================================
-    if (!autoNavigate) {
-      return;
-    }
-    const timeout = setTimeout(() => {
-      router.replace('/onboarding');
-    }, 3700);
-
-    return () => {
-      clearTimeout(timeout);
-    };
-  }, [router, autoNavigate]);
+  }, [onAssetsReady]);
 
   // =========================================
   // ANIMATED STYLES
@@ -157,7 +164,7 @@ export default function AnimatedIntro({ autoNavigate = true }: { autoNavigate?: 
 
       {/* Background */}
       <Animated.Image
-        source={require('../../../assets/images/jodtod/background_animation.png')}
+        source={require('../../../assets/images/jodtod/background_home.png')}
         className="absolute inset-0 w-full h-full"
         resizeMode="cover"
       />

@@ -153,6 +153,8 @@ class ActivityService:
         end_date: str | None = None,
         search: str | None = None,
         now: datetime | None = None,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[Activity]:
         """
         List the user's activities, newest first.
@@ -169,6 +171,11 @@ class ActivityService:
             case-insensitive partial match across title, subtitle,
             description, member_key, actor/counterparty names and
             group_name.
+        limit: max rows to return. None keeps the historical unbounded
+            behaviour; callers that only need a recent slice (the
+            profile dashboard) pass an explicit limit so the database
+            does not materialise the whole history.
+        offset: rows to skip, for "load more" paging.
         """
         if type_filter not in VALID_TYPES:
             raise InvalidActivityFilterError(
@@ -242,6 +249,11 @@ class ActivityService:
             Activity.occurred_at.desc(),
             Activity.created_at.desc(),
         )
+
+        if offset:
+            stmt = stmt.offset(offset)
+        if limit is not None:
+            stmt = stmt.limit(limit)
 
         result = await db.execute(stmt)
         return list(result.scalars().all())

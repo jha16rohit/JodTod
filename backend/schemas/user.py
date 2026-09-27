@@ -68,9 +68,20 @@ class UserPublic(UserBase):
 
     id: UUID
 
+    # Public handle, editable on the Personal Information page.
+    # Unique when set; null for users who never chose one.
+    # (Kept off UserBase so the signup contract is unchanged.)
+    username: Optional[str] = Field(
+        default=None,
+        max_length=32,
+    )
+
     email_verified: bool = False
     phone_verified: bool = False
     account_status: AccountStatus = AccountStatus.PENDING
+    # Persisted profile-photo storage reference (relative path served by
+    # the API, e.g. "/uploads/profile_photos/<uuid>.jpg"). Null when unset.
+    avatar_url: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

@@ -2,15 +2,33 @@ import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 
-// Fallback PC LAN IP for Expo Go on a physical phone (used only when the
-// Metro host cannot be determined automatically). Current Metro is
-// exp://10.201.36.80:8081, so this must be the PC's LAN IP.
-const LOCAL_IP = '10.201.36.80';
+/**
+ * Backend base URL resolution.
+ *
+ * Rules:
+ * - No LAN IP is ever hardcoded. A DHCP lease changes, and a baked-in
+ *   address silently points a physical device at the wrong host. The dev
+ *   host is always read from the Metro/Expo host URI at runtime.
+ * - Production is driven by EXPO_PUBLIC_API_URL. When it is missing the
+ *   misconfiguration is reported through `apiConfigurationError` instead
+ *   of being hidden behind a placeholder domain that would 404 at runtime.
+ */
+
+const API_PORT = '5001';
 
 /**
- * Derive the PC's LAN IP from the Metro host this app was served from
- * (e.g. "10.201.36.80:8081" -> "10.201.36.80"), so a DHCP IP change
- * does not require editing this file again.
+ * The production API origin, e.g. `https://api.jodtod.com`.
+ *
+ * Set EXPO_PUBLIC_API_URL in app/.env (see app/.env.example). The value
+ * must be the scheme + host only — no trailing /api, no trailing slash.
+ */
+const CONFIGURED_API_URL = (process.env.EXPO_PUBLIC_API_URL ?? '').trim();
+
+/**
+ * Resolve the dev-server host from the Expo host URI (e.g.
+ * `10.0.2.2:8081` -> `10.0.2.2`).
+ *
+ * Returns null for Expo Go tunnels/manifests that do not expose one.
  */
 function devServerIp(): string | null {
   try {
@@ -21,38 +39,70 @@ function devServerIp(): string | null {
           manifest2?: { extra?: { expoClient?: { hostUri?: unknown } } };
         }
       ).manifest2?.extra?.expoClient?.hostUri;
+
     if (typeof hostUri !== 'string' || !hostUri) return null;
+
     const host = hostUri.split(':')[0]?.trim();
+
     if (!host || host === 'localhost' || host === '127.0.0.1') return null;
+
     return host;
   } catch {
     return null;
   }
 }
 
-const getBaseUrl = () => {
-  if (__DEV__) {
-    // Physical phones cannot reach emulator/simulator loopbacks
-    // (10.0.2.2 / localhost) — they must use the PC's LAN IP.
-    // Emulators/simulators keep their loopback addresses.
-    const lanIp = devServerIp() ?? LOCAL_IP;
-    const isPhysicalDevice = Device.isDevice === true;
-    if (Platform.OS === 'android') {
-      if (isPhysicalDevice) {
-        return `http://${lanIp}:5000`;
-      }
-      return 'http://10.0.2.2:5000';
-    }
-    if (Platform.OS === 'ios') {
-      if (isPhysicalDevice) {
-        return `http://${lanIp}:5000`;
-      }
-      return 'http://localhost:5000';
-    }
-    // Fallback for physical devices on same Wi-Fi
-    return `http://${lanIp}:5000`;
-  }
-  return 'https://api.yourproductiondomain.com';
-};
+/**
+ * Android emulator reaches the host machine through 10.0.2.2.
+ */
+function androidEmulatorBaseUrl(): string | null {
+  if (Platform.OS !== 'android') return null;
+  if (Device.isDevice) return null;
+  return `http://10.0.2.2:${API_PORT}`;
+}
 
-export const API_URL = getBaseUrl();
+function devBaseUrl(): string | null {
+  const emulator = androidEmulatorBaseUrl();
+  if (emulator) return emulator;
+
+  const host = devServerIp();
+  if (host) return `http://${host}:${API_PORT}`;
+
+  return null;
+}
+
+function resolveApiUrl(): string {
+  if (__DEV__) {
+    const dev = devBaseUrl();
+    if (dev) return dev;
+    return `http://localhost:${API_PORT}`;
+  }
+
+  return CONFIGURED_API_URL;
+}
+
+/**
+ * Non-null when the API base URL could not be resolved.
+ *
+ * The app stays usable (the auth gate and error states render) and the
+ * request layer surfaces this instead of firing requests at a host that
+ * does not exist.
+ */
+export const apiConfigurationError: string | null = (() => {
+  if (CONFIGURED_API_URL) {
+    if (/^https?:\/\//i.test(CONFIGURED_API_URL)) return null;
+    return `EXPO_PUBLIC_API_URL must start with http:// or https:// (received "${CONFIGURED_API_URL}").`;
+  }
+
+  if (!__DEV__) {
+    return 'EXPO_PUBLIC_API_URL is not set. Add it to app/.env so release builds reach the JodTod API.';
+  }
+
+  if (!devBaseUrl()) {
+    return 'Could not resolve the Expo dev-server host. Start the app through "expo start" or set EXPO_PUBLIC_API_URL explicitly.';
+  }
+
+  return null;
+})();
+
+export const API_URL = resolveApiUrl();

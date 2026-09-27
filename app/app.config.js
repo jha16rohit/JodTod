@@ -1,0 +1,51 @@
+/** @type {import('expo/config').ExpoConfig} */
+const config = {
+  name: 'JodTod',
+  slug: 'jodtod',
+  version: '1.0.0',
+  orientation: 'portrait',
+  scheme: 'jodtod',
+  userInterfaceStyle: 'automatic',
+  android: {
+    predictiveBackGestureEnabled: false,
+    package: 'com.anonymous.app',
+  },
+  experiments: {
+    typedRoutes: true,
+    reactCompiler: true,
+  },
+  plugins: [
+    'expo-image',
+    [
+      'expo-image-picker',
+      {
+        photosPermission: 'JodTod needs access to your photos so you can set a profile picture.',
+        cameraPermission: 'JodTod needs access to your camera so you can take a profile picture.',
+        microphonePermission: false,
+      },
+    ],
+    'expo-router',
+    'expo-asset',
+    'expo-secure-store',
+    'expo-splash-screen',
+    'expo-web-browser',
+    [
+      'expo-build-properties',
+      {
+        android: {
+          usesCleartextTraffic: true,
+        },
+      },
+    ],
+  ],
+  extra: {
+    router: {},
+    googleWebClientId: '491126960792-69bdj4155d3681ktsaqjp4j7h69cge5n.apps.googleusercontent.com',
+    googleAndroidClientId: process.env.GOOGLE_ANDROID_CLIENT_ID ?? null,
+    eas: {
+      projectId: '6b8c4717-46de-4342-8318-3d5b3308660e',
+    },
+  },
+};
+
+export default config;

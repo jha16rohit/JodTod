@@ -4,6 +4,7 @@ export type Member = {
   email: string;
   role: 'Admin' | 'Co-Admin' | 'Member';
   isYou?: boolean;
+  avatar: string;
 };
 
 export type Expense = {
@@ -23,6 +24,7 @@ export type Group = {
   dateRange: string;
   destination: string;
   description: string;
+  coverImage: string;
   budget?: number;
   totalExpenses: number;
   youAreOwed: number;
@@ -39,16 +41,17 @@ export const MOCK_GROUPS: Group[] = [
     dateRange: 'Apr 10 – Apr 18, 2025',
     destination: 'Goa, India',
     description: 'Beach, adventure and good vibes! 🏖️',
-    budget: 50000,
+    coverImage: 'https://images.unsplash.com/photo-1512343879784-a960bf40e7f2?w=400',
+    budget: 50010,
     totalExpenses: 24850,
     youAreOwed: 2450,
     youOwe: 0,
     members: [
-      { id: 'm1', name: 'Rohit', email: 'rohit@example.com', role: 'Admin', isYou: true },
-      { id: 'm2', name: 'Aman', email: 'aman@example.com', role: 'Co-Admin' },
-      { id: 'm3', name: 'Neha', email: 'neha@example.com', role: 'Member' },
-      { id: 'm4', name: 'Karan', email: 'karan@example.com', role: 'Member' },
-      { id: 'm5', name: 'Priya', email: 'priya@example.com', role: 'Member' },
+      { id: 'm1', name: 'Rohit', email: 'rohit@example.com', role: 'Admin', isYou: true, avatar: 'https://i.pravatar.cc/100?img=12' },
+      { id: 'm2', name: 'Aman', email: 'aman@example.com', role: 'Co-Admin', avatar: 'https://i.pravatar.cc/100?img=13' },
+      { id: 'm3', name: 'Neha', email: 'neha@example.com', role: 'Member', avatar: 'https://i.pravatar.cc/100?img=47' },
+      { id: 'm4', name: 'Karan', email: 'karan@example.com', role: 'Member', avatar: 'https://i.pravatar.cc/100?img=15' },
+      { id: 'm5', name: 'Priya', email: 'priya@example.com', role: 'Member', avatar: 'https://i.pravatar.cc/100?img=32' },
     ],
     expenses: [
       { id: 'e1', title: "Dinner at Bruno's", amount: 2850, date: 'Apr 16, 2025', paidBy: 'you', splitCount: 4, icon: 'restaurant' },
@@ -65,14 +68,15 @@ export const MOCK_GROUPS: Group[] = [
     dateRange: 'Jan 1, 2025 – Present',
     destination: 'Bengaluru, India',
     description: 'Shared apartment expenses',
+    coverImage: 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=400',
     totalExpenses: 18400,
     youAreOwed: 0,
     youOwe: 680,
     members: [
-      { id: 'm1', name: 'Rohit', email: 'rohit@example.com', role: 'Admin', isYou: true },
-      { id: 'm2', name: 'Ishaan', email: 'ishaan@example.com', role: 'Member' },
-      { id: 'm3', name: 'Divya', email: 'divya@example.com', role: 'Member' },
-      { id: 'm4', name: 'Aditi', email: 'aditi@example.com', role: 'Member' },
+      { id: 'm1', name: 'Rohit', email: 'rohit@example.com', role: 'Admin', isYou: true, avatar: 'https://i.pravatar.cc/100?img=12' },
+      { id: 'm2', name: 'Ishaan', email: 'ishaan@example.com', role: 'Member', avatar: 'https://i.pravatar.cc/100?img=11' },
+      { id: 'm3', name: 'Divya', email: 'divya@example.com', role: 'Member', avatar: 'https://i.pravatar.cc/100?img=26' },
+      { id: 'm4', name: 'Aditi', email: 'aditi@example.com', role: 'Member', avatar: 'https://i.pravatar.cc/100?img=45' },
     ],
     expenses: [
       { id: 'e1', title: 'Groceries', amount: 3200, date: 'Sep 2, 2025', paidBy: 'you', splitCount: 4, icon: 'restaurant' },
@@ -86,18 +90,19 @@ export const MOCK_GROUPS: Group[] = [
     dateRange: 'Dec 20 – Dec 28, 2024',
     destination: 'Manali, India',
     description: 'Snow, bonfires and mountain views ❄️',
+    coverImage: 'https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?w=400',
     budget: 40000,
     totalExpenses: 36700,
     youAreOwed: 1120,
     youOwe: 0,
     members: [
-      { id: 'm1', name: 'Rohit', email: 'rohit@example.com', role: 'Admin', isYou: true },
-      { id: 'm2', name: 'Sanjay', email: 'sanjay@example.com', role: 'Member' },
-      { id: 'm3', name: 'Meera', email: 'meera@example.com', role: 'Member' },
+      { id: 'm1', name: 'Rohit', email: 'rohit@example.com', role: 'Admin', isYou: true, avatar: 'https://i.pravatar.cc/100?img=12' },
+      { id: 'm2', name: 'Sanjay', email: 'sanjay@example.com', role: 'Member', avatar: 'https://i.pravatar.cc/100?img=53' },
+      { id: 'm3', name: 'Meera', email: 'meera@example.com', role: 'Member', avatar: 'https://i.pravatar.cc/100?img=44' },
     ],
     expenses: [
       { id: 'e1', title: 'Cab to Manali', amount: 6500, date: 'Dec 20, 2024', paidBy: 'you', splitCount: 6, icon: 'car' },
-      { id: 'e2', title: 'Cottage Stay', amount: 15000, date: 'Dec 21, 2024', paidBy: 'Sanjay', splitCount: 6, icon: 'bed' },
+      { id: 'e2', title: 'Cottage Stay', amount: 15001, date: 'Dec 21, 2024', paidBy: 'Sanjay', splitCount: 6, icon: 'bed' },
     ],
   },
   {
@@ -107,12 +112,13 @@ export const MOCK_GROUPS: Group[] = [
     dateRange: 'Aug 5 – Aug 12, 2024',
     destination: 'Rishikesh, India',
     description: 'Reunion trip after graduation 🎓',
+    coverImage: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=400',
     totalExpenses: 22100,
     youAreOwed: 0,
     youOwe: 0,
     members: [
-      { id: 'm1', name: 'Rohit', email: 'rohit@example.com', role: 'Admin', isYou: true },
-      { id: 'm2', name: 'Varun', email: 'varun@example.com', role: 'Member' },
+      { id: 'm1', name: 'Rohit', email: 'rohit@example.com', role: 'Admin', isYou: true, avatar: 'https://i.pravatar.cc/100?img=12' },
+      { id: 'm2', name: 'Varun', email: 'varun@example.com', role: 'Member', avatar: 'https://i.pravatar.cc/100?img=59' },
     ],
     expenses: [],
   },
