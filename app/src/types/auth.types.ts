@@ -25,11 +25,23 @@ export type AccountStatus =
 export interface User {
   id: string;
   name: string | null;
+  /**
+   * Public handle, editable on the Personal Information page.
+   * Unique when set; null when the user never chose one.
+   * (Mirrors backend UserPublic.username.)
+   */
+  username: string | null;
   email: string | null;
   phone: string | null;
   email_verified: boolean;
   phone_verified: boolean;
   account_status: AccountStatus;
+  /**
+   * Persisted profile-photo reference from the backend
+   * (relative path, e.g. "/uploads/profile_photos/<uuid>.jpg").
+   * Null when the user has no photo.
+   */
+  avatar_url: string | null;
   created_at: string;
   updated_at: string;
   /** Backend-authoritative gate for protected application routes. */

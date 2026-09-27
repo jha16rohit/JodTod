@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Callable, Literal
+from typing import Any, Callable, Literal, Sequence
 
 import jwt as pyjwt
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -109,7 +109,7 @@ def _decode_with_jwks(
     provider: Provider,
     jwks_url: str,
     issuers: set[str],
-    audience: str,
+    audience: str | Sequence[str],
     key_fetcher: Callable[[str], Any] | None = None,
 ) -> dict[str, Any]:
     """Verify signature/issuer/audience/expiry; return claims.
@@ -143,13 +143,41 @@ def _decode_with_jwks(
     return claims
 
 
+def google_audiences() -> set[str]:
+    """Google client IDs accepted as the ID token `aud` claim.
+
+    The app resolves the Google OAuth client per platform, and Google
+    sets `aud` to the client that requested the token. Every client ID
+    this deployment is configured with is therefore a valid audience;
+    anything else is still rejected by PyJWT.
+
+    The Web client and the Android client MUST be distinct Google
+    projects entries: a Web client cannot be registered for a custom
+    scheme, and reusing it on Android is the exact misconfiguration
+    that produced "Error 400: invalid_request". If both slots hold the
+    same value, warn loudly instead of silently accepting it.
+    """
+    web = (settings.google_client_id or "").strip()
+    android = (settings.google_android_client_id or "").strip()
+    configured = {client_id for client_id in (web, android) if client_id}
+    if web and android and web == android:
+        logger.warning(
+            "GOOGLE_CLIENT_ID and the Android Google client ID are the "
+            "same value. Google account linking on Android needs a "
+            "DISTINCT Android OAuth client (package + SHA-1 + "
+            "jodtod://oauth); a Web client cannot be used as an Android "
+            "client."
+        )
+    return configured
+
+
 def verify_google_id_token(
     id_token: str,
     key_fetcher: Callable[[str], Any] | None = None,
 ) -> dict[str, Any]:
     """Verify a Google ID token; return its claims."""
-    client_id = (settings.google_client_id or "").strip()
-    if not client_id:
+    audiences = google_audiences()
+    if not audiences:
         raise OAuthNotConfiguredError(
             "Google sign-in is not configured."
         )
@@ -158,7 +186,7 @@ def verify_google_id_token(
         provider="google",
         jwks_url=GOOGLE_CERTS_URL,
         issuers=GOOGLE_ISSUERS,
-        audience=client_id,
+        audience=sorted(audiences),
         key_fetcher=key_fetcher,
     )
     if not claims.get("email") or not _email_verified(claims):
@@ -290,6 +318,22 @@ async def authenticate_with_provider(
             await db.flush()
 
         _ensure_may_authenticate(user)
+
+        # Backfill display metadata for Linked Accounts: the verified
+        # provider email from these claims (subject columns stay the
+        # identity source of truth). Apple may omit email — keep the
+        # previous value then.
+        if email is not None:
+            setattr(
+                user,
+                "google_email" if provider == "google" else "apple_email",
+                email,
+            )
+        setattr(
+            user,
+            "google_linked_at" if provider == "google" else "apple_linked_at",
+            datetime.now(timezone.utc),
+        )
 
         session, refresh_token = await SessionService.issue_session(
             db,

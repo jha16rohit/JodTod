@@ -1,9 +1,10 @@
 # backend/services/user_service.py
 
+import re
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.security import hash_password
@@ -13,6 +14,21 @@ from backend.schemas.user import UserCreate
 
 class DuplicateAccountError(Exception):
     """Raised when an email or phone is already registered."""
+
+
+class DuplicateProfileFieldError(DuplicateAccountError):
+    """
+    Raised when a profile update collides with another user's unique
+    field (username or phone). Mapped to HTTP 409 by the users router.
+    """
+
+
+# Public handles: 3-32 chars, letters/digits plus . _ - (stored trimmed,
+# uniqueness enforced case-insensitively to avoid "Rohit" vs "rohit").
+USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9._-]{3,32}$")
+
+# International format preserved as typed: digits plus + ( ) - . space.
+PHONE_ALLOWED_PATTERN = re.compile(r"^[+0-9()\-.\s]+$")
 
 
 class InactiveAccountError(Exception):
@@ -68,6 +84,30 @@ class UserService:
         )
 
     @staticmethod
+    async def get_by_username(
+        db: AsyncSession,
+        username: str,
+        *,
+        exclude_user_id: Optional[UUID] = None,
+    ) -> Optional[User]:
+        """
+        Retrieve a user by public username (case-insensitive).
+
+        exclude_user_id skips the caller's own row so an unchanged
+        username never collides with itself.
+        """
+
+        if not username:
+            return None
+
+        stmt = select(User).where(
+            func.lower(User.username) == username.strip().lower()
+        )
+        if exclude_user_id is not None:
+            stmt = stmt.where(User.id != exclude_user_id)
+        return await db.scalar(stmt)
+
+    @staticmethod
     async def get_by_phone(
         db: AsyncSession,
         phone: str,
@@ -84,6 +124,24 @@ class UserService:
         return await db.scalar(
             select(User).where(
                 User.phone == normalized_phone
+            )
+        )
+
+    @staticmethod
+    async def get_by_phone_excluding(
+        db: AsyncSession,
+        phone: str,
+        exclude_user_id: UUID,
+    ) -> Optional[User]:
+        """Phone lookup that ignores the caller's own row."""
+
+        if not phone:
+            return None
+
+        return await db.scalar(
+            select(User).where(
+                User.phone == phone.strip(),
+                User.id != exclude_user_id,
             )
         )
 
@@ -275,13 +333,71 @@ class UserService:
     # ============================================================
 
     @staticmethod
+    def validate_username_format(username: str) -> str:
+        """
+        Clean and validate a public username.
+
+        Raises ValueError for blank/overlong/malformed handles.
+        Uniqueness is checked separately (needs the database).
+        """
+        cleaned = (username or "").strip()
+        if not cleaned:
+            raise ValueError(
+                "Username cannot be empty."
+            )
+        if not USERNAME_PATTERN.match(cleaned):
+            raise ValueError(
+                "Username must be 3-32 characters using letters, "
+                "numbers, dot, underscore, or hyphen."
+            )
+        return cleaned
+
+    @staticmethod
+    def validate_phone_format(phone: str) -> str:
+        """
+        Clean and validate a phone number.
+
+        International format is preserved as typed (leading '+'
+        kept). Raises ValueError for blank/malformed numbers.
+        Uniqueness is checked separately (needs the database).
+        """
+        cleaned = (phone or "").strip()
+        if not cleaned:
+            raise ValueError(
+                "Phone number cannot be empty."
+            )
+        if len(cleaned) > 32:
+            raise ValueError(
+                "Phone number is too long."
+            )
+        if not PHONE_ALLOWED_PATTERN.match(cleaned):
+            raise ValueError(
+                "Phone number contains invalid characters."
+            )
+        digits = re.sub(r"\D", "", cleaned)
+        if not 7 <= len(digits) <= 15:
+            raise ValueError(
+                "Phone number must contain 7-15 digits."
+            )
+        return cleaned
+
+    @staticmethod
     async def update_profile(
         db: AsyncSession,
         user: User,
         name: Optional[str] = None,
+        username: Optional[str] = None,
+        phone: Optional[str] = None,
     ) -> User:
         """
-        Update basic user profile information.
+        Update the authenticated user's editable profile fields.
+
+        Only Full Name, Username, and Phone Number are writable here —
+        Email is never touched by this method (read-only on the
+        Personal Information page). Each supplied field is validated;
+        username/phone are checked for uniqueness against OTHER users
+        (the caller's own row is excluded). Raises ValueError for
+        invalid values and DuplicateProfileFieldError for collisions.
         """
 
         if name is not None:
@@ -292,7 +408,40 @@ class UserService:
                     "Name cannot be empty."
                 )
 
+            if len(cleaned_name) > 100:
+                raise ValueError(
+                    "Name is too long."
+                )
+
             user.name = cleaned_name
+
+        if username is not None:
+            cleaned_username = UserService.validate_username_format(
+                username
+            )
+            taken = await UserService.get_by_username(
+                db,
+                cleaned_username,
+                exclude_user_id=user.id,
+            )
+            if taken is not None:
+                raise DuplicateProfileFieldError(
+                    "This username is already taken."
+                )
+            user.username = cleaned_username
+
+        if phone is not None:
+            cleaned_phone = UserService.validate_phone_format(phone)
+            taken = await UserService.get_by_phone_excluding(
+                db,
+                cleaned_phone,
+                user.id,
+            )
+            if taken is not None:
+                raise DuplicateProfileFieldError(
+                    "This phone number is already registered."
+                )
+            user.phone = cleaned_phone
 
         await db.flush()
 

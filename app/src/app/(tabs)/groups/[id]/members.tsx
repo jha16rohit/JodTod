@@ -1,20 +1,71 @@
-import { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Modal } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, Modal, ActivityIndicator } from 'react-native';
+import { useFocusEffect, useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { BubbleBackdrop, ScreenHeader, GlassCard, colors } from '@/components/groups/ui';
 import { MemberRow, SheetMenuItem } from '@/components/groups/MemberRow';
-import { getGroup, Member } from '@/lib/mockGroups';
+import { useAuth } from '@/context/AuthContext';
+import { fetchGroupDetail, type GroupDetail } from '@/services/groups.api';
+import { membersOf } from '@/lib/groupAdapters';
+import type { Member } from '@/lib/mockGroups';
 
 export default function GroupMembers() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const group = getGroup(id as string);
+  const { user } = useAuth();
+  const groupId = Array.isArray(id) ? id[0] : (id as string);
   const [menuFor, setMenuFor] = useState<Member | null>(null);
+  const [detail, setDetail] = useState<GroupDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  if (!group) return null;
-  const base = `/(tabs)/groups/${group.id}`;
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const load = useCallback(async () => {
+    if (!groupId) {
+      setError('Group not found.');
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const group = await fetchGroupDetail(groupId);
+      if (!mountedRef.current) return;
+      if (!group) {
+        setError('Group not found.');
+        setDetail(null);
+      } else {
+        setDetail(group);
+      }
+    } catch (e) {
+      if (!mountedRef.current) return;
+      setError(e instanceof Error ? e.message : 'Could not load members.');
+      setDetail(null);
+    } finally {
+      if (mountedRef.current) setLoading(false);
+    }
+  }, [groupId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      mountedRef.current = true;
+      void load();
+      return () => {
+        mountedRef.current = false;
+      };
+    }, [load]),
+  );
+
+  const base = `/(tabs)/groups/${groupId}`;
+  const members = detail ? membersOf(detail, user?.id ?? null) : [];
 
   return (
     <BubbleBackdrop>
@@ -45,21 +96,41 @@ export default function GroupMembers() {
           </View>
         </TouchableOpacity>
 
-        <GlassCard>
-          <View style={{ paddingHorizontal: 16 }}>
-            {group.members.map((m, i) => (
-              <MemberRow
-                key={m.id}
-                member={m}
-                isLast={i === group.members.length - 1}
-                onMenuPress={setMenuFor}
-              />
-            ))}
+        {loading ? (
+          <View className="items-center py-12">
+            <ActivityIndicator size="small" color={colors.textDark} />
           </View>
-        </GlassCard>
+        ) : error || !detail ? (
+          <View className="items-center py-12">
+            <Text className="text-[14px]" style={{ color: colors.textMuted }}>
+              {error ?? 'Group not found'}
+            </Text>
+            <TouchableOpacity
+              onPress={() => void load()}
+              activeOpacity={0.7}
+              className="mt-4 rounded-full px-5 py-2.5"
+              style={{ backgroundColor: colors.brandDark }}
+            >
+              <Text className="text-[13px] font-bold text-white">Retry</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <GlassCard>
+            <View style={{ paddingHorizontal: 16 }}>
+              {members.map((m, i) => (
+                <MemberRow
+                  key={m.id}
+                  member={m}
+                  isLast={i === members.length - 1}
+                  onMenuPress={setMenuFor}
+                />
+              ))}
+            </View>
+          </GlassCard>
+        )}
       </ScrollView>
 
-      {/* Manage-member action sheet */}
+      {/* Manage-member action sheet (display only: role changes land with moderation tooling) */}
       <Modal visible={!!menuFor} transparent animationType="fade" onRequestClose={() => setMenuFor(null)}>
         <TouchableOpacity
           activeOpacity={1}

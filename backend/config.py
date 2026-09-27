@@ -155,7 +155,25 @@ class Settings(BaseSettings):
         ge=60,
         le=86400,
     )
-    database_pool_pre_ping: bool = True
+    # Connection-liveness strategy (see database.py module docstring).
+    #
+    # pool_pre_ping costs ONE EXTRA DATABASE ROUND TRIP ON EVERY SINGLE
+    # SESSION CHECKOUT. Measured on the Tokyo pooler (~185 ms RTT): p50
+    # session checkout 1394 ms with pre_ping vs 785 ms without — roughly
+    # 610 ms added to every authenticated request.
+    #
+    # Stale-connection safety is therefore provided WITHOUT a per-request
+    # round trip, by three mechanisms working together:
+    #   1. pool_recycle_seconds retires connections before the server or
+    #      pooler can drop them as idle.
+    #   2. SQLAlchemy invalidates a connection automatically when a
+    #      statement fails with a disconnect error, so a broken socket
+    #      never returns to the pool.
+    #   3. The authentication read (the first statement of every
+    #      request, and the statement most exposed to a connection that
+    #      has been idle in the pool) retries once on a disconnect.
+    # See is_disconnect_error() in database.py.
+    database_pool_pre_ping: bool = False
     database_echo: bool = False
 
     # ============================================================
@@ -167,9 +185,22 @@ class Settings(BaseSettings):
     # ============================================================
     # GOOGLE OAUTH
     # ============================================================
+    # Web OAuth client: used by the backend/web flow.
     google_client_id: str | None = None
     google_client_secret: SecretStr | None = None
     google_redirect_uri: str | None = None
+    # Android OAuth client: used by the Android app (redirect
+    # jodtod://oauth). An ID token minted for the Android client carries
+    # that client ID as its `aud`, so the backend accepts it as a valid
+    # audience alongside google_client_id.
+    #
+    # The variable name is GOOGLE_ANDROID_CLIENT_ID (not ANDROID_GOOGLE_CLIENT_ID)
+    # to avoid confusion with the Web client. The Android client ID is a public
+    # value and is also injected into the Expo config via app.config.js.
+    google_android_client_id: str | None = Field(
+        default=None,
+        validation_alias="GOOGLE_ANDROID_CLIENT_ID",
+    )
 
     # ============================================================
     # APPLE OAUTH

@@ -749,6 +749,127 @@ export async function apiResetPassword(
 }
 
 // ---------------------------------------------------------------------------
+// Authorized fetch for non-auth API services
+// ---------------------------------------------------------------------------
+
+export interface AuthorizedFetchOptions {
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  body?: unknown;
+  headers?: Record<string, string>;
+  timeoutMs?: number;
+  /** Internal retry guard — prevents refresh/retry loops. */
+  _retried?: boolean;
+  /**
+   * When false the request is sent without an Authorization header and
+   * a 401 is returned to the caller instead of triggering a refresh.
+   * Used for endpoints that are public but still benefit from the
+   * shared timeout handling.
+   */
+  authenticated?: boolean;
+}
+
+/**
+ * Single request path for the non-authentication API services.
+ *
+ * Every service (profile, preferences, activity, support, linked
+ * accounts) needs the same three things, and previously re-implemented
+ * them by hand:
+ *
+ * 1. the Bearer token from the shared token store,
+ * 2. a timeout so a hung request rejects instead of spinning forever,
+ * 3. a single refresh + one retry when the access token has expired.
+ *
+ * This reuses the existing single-flight refresh above, so concurrent
+ * 401s across screens still collapse into one refresh request.
+ *
+ * It returns the raw Response: each service keeps its own typed error
+ * class and `parseError` handling, so error messages shown to the user
+ * are unchanged.
+ */
+export async function authorizedFetch(
+  path: string,
+  options: AuthorizedFetchOptions = {},
+): Promise<Response> {
+  const {
+    method = "GET",
+    body,
+    headers: extraHeaders,
+    timeoutMs,
+    _retried = false,
+    authenticated = true,
+  } = options;
+
+  const controller = new AbortController();
+  let timedOut = false;
+
+  const timer = setTimeout(
+    () => {
+      timedOut = true;
+      controller.abort();
+    },
+    timeoutMs ?? AUTH_TIMEOUTS.REQUEST_TIMEOUT_MS,
+  );
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...extraHeaders,
+  };
+
+  try {
+    if (authenticated) {
+      const authHeaders = await getAuthorizationHeader();
+      Object.assign(headers, authHeaders);
+    }
+
+    const response = await fetch(`${API_V1_BASE_URL}${path}`, {
+      method,
+      headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+
+    /**
+     * Expired access token: refresh once (deduplicated), then replay the
+     * request exactly once.
+     */
+    if (response.status === 401 && authenticated && !_retried) {
+      const stored = await getAuthTokens();
+
+      if (stored.refreshToken) {
+        await refreshTokensWithDedup(stored.refreshToken);
+
+        return authorizedFetch(path, { ...options, _retried: true });
+      }
+
+      await clearAuthentication();
+    }
+
+    return response;
+  } catch (error) {
+    if (timedOut) {
+      throw new AuthError(
+        "The request timed out. Please try again.",
+        "TIMEOUT",
+      );
+    }
+
+    if (isRequestCanceled(error)) {
+      throw new AuthError(
+        "The request was canceled. Please try again.",
+        "REQUEST_CANCELLED",
+      );
+    }
+
+    throw new AuthError(
+      "Could not reach the server. Check your connection and try again.",
+      "NETWORK_ERROR",
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Authorization helper
 // ---------------------------------------------------------------------------
 

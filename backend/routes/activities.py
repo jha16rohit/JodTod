@@ -35,7 +35,7 @@ router = APIRouter(
 )
 async def list_activities(
     user: Annotated[User, Depends(get_current_user)],
-    db: AsyncSession = Depends(get_db, use_cache=False),
+    db: AsyncSession = Depends(get_db),
     type: Annotated[
         Literal["all", "expense", "settlement", "member", "group"],
         Query(description="Activity type filter"),
@@ -73,6 +73,19 @@ async def list_activities(
             "title, description, member and group"
         ),
     ] = None,
+    limit: Annotated[
+        int | None,
+        Query(
+            ge=1,
+            le=200,
+            description="Max rows to return. Omit for the full "
+            "history; the profile dashboard passes a small limit.",
+        ),
+    ] = None,
+    offset: Annotated[
+        int,
+        Query(ge=0, description="Rows to skip, for load-more paging"),
+    ] = 0,
 ) -> ActivityListResponse:
     """
     List the authenticated user's activities, newest first.
@@ -81,6 +94,9 @@ async def list_activities(
     Settlements / Members), the search field, and the Filter
     Activity sheet selections (type, date range incl. custom range,
     member, group).
+
+    limit/offset are additive: omitting them returns exactly what this
+    endpoint always returned, so existing clients are unaffected.
     """
     try:
         activities = await ActivityService.list_activities(
@@ -93,6 +109,8 @@ async def list_activities(
             start_date=start_date,
             end_date=end_date,
             search=q,
+            limit=limit,
+            offset=offset,
         )
     except InvalidActivityFilterError as exc:
         raise HTTPException(
@@ -112,7 +130,7 @@ async def list_activities(
 async def get_activity(
     activity_id: UUID,
     user: Annotated[User, Depends(get_current_user)],
-    db: AsyncSession = Depends(get_db, use_cache=False),
+    db: AsyncSession = Depends(get_db),
 ) -> ActivityResponse:
     """
     Return one activity owned by the authenticated user.

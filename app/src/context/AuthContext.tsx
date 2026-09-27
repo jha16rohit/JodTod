@@ -19,6 +19,7 @@ import React, {
 import {
   getAuthTokens,
   getCachedUser,
+  saveCachedUser,
   saveLastOnlineAuthentication,
 } from "../services/auth.storage";
 import * as AuthService from "../services/auth.service";
@@ -61,6 +62,14 @@ export interface AuthContextValue {
   logout: () => Promise<void>;
   refreshSession: () => Promise<void>;
   restoreSession: () => Promise<void>;
+  /** Re-read the authoritative user record (e.g. after profile save). */
+  refreshUser: () => Promise<void>;
+  /**
+   * Adopt an already-authoritative user record (e.g. the PATCH
+   * /users/me response) into shared state + cache without an extra
+   * GET round-trip.
+   */
+  adoptUser: (fresh: AuthUser) => Promise<void>;
   sendOTP: (input: SendOTPRequest) => Promise<unknown>;
   sendEmailVerification: (email: string) => Promise<unknown>;
   verifyOTP: (input: VerifyOTPRequest) => Promise<unknown>;
@@ -330,6 +339,28 @@ useEffect(() => {
     }
   }, [syncSessionId]);
 
+  const refreshUser = useCallback(async () => {
+    try {
+      const fresh = await AuthService.getCurrentUser();
+      if (mountedRef.current) {
+        setUser(fresh);
+        setError(null);
+      }
+    } catch {
+      // Keep the cached user; the next authenticated request will
+      // surface expiry honestly via the api layer.
+    }
+  }, []);
+
+  const adoptUser = useCallback(async (fresh: AuthUser) => {
+    if (mountedRef.current) {
+      setUser(fresh);
+      setError(null);
+    }
+    // Same cache writer getCurrentUser uses, so reloads agree.
+    await saveCachedUser(fresh).catch(() => undefined);
+  }, []);
+
   const sendOTP = useCallback(async (input: SendOTPRequest) => {
     return AuthService.sendOTP(input);
   }, []);
@@ -408,6 +439,8 @@ useEffect(() => {
       logout,
       refreshSession,
       restoreSession,
+      refreshUser,
+      adoptUser,
       sendOTP,
       sendEmailVerification,
       verifyOTP,
@@ -428,6 +461,8 @@ useEffect(() => {
     logout,
     refreshSession,
     restoreSession,
+    refreshUser,
+    adoptUser,
     sendOTP,
     sendEmailVerification,
     verifyOTP,
