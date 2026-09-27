@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { BubbleBackdrop, ScreenHeader, colors } from '@/components/groups/ui';
@@ -13,13 +13,14 @@ import {
   type Expense as ApiExpense,
 } from '@/services/groups.api';
 import { expensesOf } from '@/lib/groupAdapters';
-import type { Expense } from '@/lib/mockGroups';
+import type { Expense } from '@/lib/groupAdapters';
 
 type FilterTab = 'All' | 'My Expenses' | 'By Day' | 'By Category';
 const TABS: readonly FilterTab[] = ['All', 'My Expenses', 'By Day', 'By Category'];
 const PAGE = 50;
 
 export default function GroupExpenses() {
+  const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
   const groupId = Array.isArray(id) ? id[0] : (id as string);
@@ -101,7 +102,14 @@ export default function GroupExpenses() {
 
   return (
     <BubbleBackdrop>
-      <ScreenHeader title={groupName} subtitle="Expenses" rightIcon="add" onRightPress={() => {}} />
+      <ScreenHeader
+        title={groupName}
+        subtitle="Expenses"
+        rightIcon="add"
+        onRightPress={() =>
+          router.push(`/add-expense?groupId=${groupId}` as any)
+        }
+      />
 
       <View className="px-5">
         <FilterTabs tabs={TABS} value={tab} onChange={setTab} />

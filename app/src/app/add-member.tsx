@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -9,28 +9,27 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
+  Share,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView, BlurTargetView } from 'expo-blur';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import * as Clipboard from 'expo-clipboard';
 import {
-  addMemberToGroup,
-  createPerson,
-  isValidEmail,
-  isValidPhone,
-  memberStatus,
-  useGroups,
-  type Group,
-  type Member,
-  type Person,
-} from '../lib/mockGroups';
+  buildInviteLink,
+  fetchGroupDetail,
+  fetchMyGroups,
+  GroupsApiError,
+} from '@/services/groups.api';
 
 const GREEN = '#34D399';
 const CORAL = '#FB7185';
 
-type Step = 'form' | 'created' | 'groups' | 'added';
+type Step = 'form' | 'groups' | 'shared';
 
 function GlassShell({
   children,
@@ -110,68 +109,124 @@ function Field({
 const inputClass =
   'rounded-xl border border-white/20 bg-white/10 px-3.5 py-3 text-[15px] text-white';
 
+type GroupOption = { id: string; name: string; memberCount: number };
+
+/**
+ * Add Member drives the real backend membership path: group membership
+ * is granted when the invited person joins with the group's invite code
+ * (POST /api/groups/join), so this screen collects who to invite,
+ * resolves the group's live invite code, and shares it with them.
+ * No member row is ever faked locally.
+ */
 export default function AddMember() {
   const router = useRouter();
   const { groupId: presetGroupId } = useLocalSearchParams<{ groupId?: string }>();
   const backgroundRef = useRef<View>(null);
-  const allGroups = useGroups();
 
   const [step, setStep] = useState<Step>('form');
   const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
+  const [contact, setContact] = useState('');
   const [touched, setTouched] = useState(false);
-  const [person, setPerson] = useState<Person | null>(null);
-  const [alreadyExisted, setAlreadyExisted] = useState(false);
-  const [addedGroup, setAddedGroup] = useState<Group | null>(null);
-  const [addedMember, setAddedMember] = useState<Member | null>(null);
-  const [addedIsNew, setAddedIsNew] = useState(true);
+
+  const [groups, setGroups] = useState<GroupOption[]>([]);
+  const [groupsLoading, setGroupsLoading] = useState(true);
+  const [groupsError, setGroupsError] = useState<string | null>(null);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(
+    typeof presetGroupId === 'string' ? presetGroupId : null,
+  );
+  const [inviteCode, setInviteCode] = useState<string | null>(null);
+  const [inviteGroupName, setInviteGroupName] = useState('');
+  const [codeLoading, setCodeLoading] = useState(false);
+  const [codeError, setCodeError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    void (async () => {
+      setGroupsLoading(true);
+      setGroupsError(null);
+      try {
+        const rows = await fetchMyGroups();
+        setGroups(
+          rows.map((g) => ({
+            id: g.id,
+            name: g.name,
+            memberCount: g.member_count,
+          })),
+        );
+      } catch (e) {
+        setGroups([]);
+        setGroupsError(
+          e instanceof Error ? e.message : 'Could not load groups.',
+        );
+      } finally {
+        setGroupsLoading(false);
+      }
+    })();
+  }, []);
 
   const nameError =
     touched && name.trim().length === 0 ? 'Enter a name' : null;
-  const phoneError =
-    phone.trim().length > 0 && !isValidPhone(phone)
-      ? 'Enter a valid 10-digit phone number'
-      : null;
-  const emailError =
-    email.trim().length > 0 && !isValidEmail(email)
-      ? 'Enter a valid email address'
-      : null;
-  const formValid = !nameError && !phoneError && !emailError && name.trim().length > 0;
+  const formValid = name.trim().length > 0 && !nameError;
+
+  const loadInviteCode = async (id: string) => {
+    setCodeLoading(true);
+    setCodeError(null);
+    try {
+      const detail = await fetchGroupDetail(id);
+      if (!detail) {
+        setCodeError('Group not found.');
+        return;
+      }
+      if (!detail.invite_code) {
+        setCodeError('This group has no invite code.');
+        return;
+      }
+      setInviteCode(detail.invite_code);
+      setInviteGroupName(detail.name);
+      setStep('shared');
+    } catch (e) {
+      setCodeError(
+        e instanceof GroupsApiError
+          ? e.message
+          : 'Could not load the invite code.',
+      );
+    } finally {
+      setCodeLoading(false);
+    }
+  };
 
   const submitPerson = () => {
     setTouched(true);
     if (!formValid) return;
-    const { person: p, isNew } = createPerson({
-      name: name.trim(),
-      phone: phone.trim() || null,
-      email: email.trim() || null,
-    });
-    setPerson(p);
-    setAlreadyExisted(!isNew);
-    // From a group invite: skip group selection, add straight to that group.
     if (typeof presetGroupId === 'string' && presetGroupId) {
-      const res = addMemberToGroup(presetGroupId, p.id);
-      const g = allGroups.find((x) => x.id === presetGroupId) ?? null;
-      setAddedGroup(g);
-      setAddedMember(res.member);
-      setAddedIsNew(res.isNew);
-      setStep('added');
+      setSelectedGroupId(presetGroupId);
+      void loadInviteCode(presetGroupId);
       return;
     }
-    setStep('created');
+    setStep('groups');
   };
 
-  const addToGroup = (group: Group) => {
-    if (!person) return;
-    const res = addMemberToGroup(group.id, person.id);
-    setAddedGroup(group);
-    setAddedMember(res.member);
-    setAddedIsNew(res.isNew);
-    setStep('added');
+  const inviteLink = inviteCode ? buildInviteLink(inviteCode) : null;
+
+  const copyLink = async () => {
+    if (!inviteLink) return;
+    await Clipboard.setStringAsync(inviteLink);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1800);
   };
 
-  const selectable = allGroups.filter((g) => g.status === 'Active');
+  const shareLink = async () => {
+    if (!inviteLink) return;
+    try {
+      await Share.share({
+        message: `Hi ${name.trim()}, join my group "${inviteGroupName}" on JodTod: ${inviteLink}`,
+      });
+    } catch {
+      Alert.alert('Could not share invite');
+    }
+  };
+
+  const selectedGroup = groups.find((g) => g.id === selectedGroupId) ?? null;
 
   return (
     <View style={{ flex: 1 }}>
@@ -201,7 +256,7 @@ export default function AddMember() {
                 Add Member
               </Text>
               <Text className="text-[12px] text-white/65" numberOfLines={1}>
-                Add someone to JodTod
+                Invite someone with the group link
               </Text>
             </View>
           </View>
@@ -224,145 +279,126 @@ export default function AddMember() {
                       className={inputClass}
                     />
                   </Field>
-                  <Field label="Phone Number (optional)" error={phoneError}>
+                  <Field label="Phone or Email (optional, for your reference)">
                     <TextInput
-                      value={phone}
-                      onChangeText={setPhone}
+                      value={contact}
+                      onChangeText={setContact}
                       placeholder="+91 98765 43210"
                       placeholderTextColor="rgba(255,255,255,0.35)"
-                      keyboardType="phone-pad"
-                      className={inputClass}
-                    />
-                  </Field>
-                  <Field label="Email (optional)" error={emailError}>
-                    <TextInput
-                      value={email}
-                      onChangeText={setEmail}
-                      placeholder="rahul@example.com"
-                      placeholderTextColor="rgba(255,255,255,0.35)"
-                      keyboardType="email-address"
+                      keyboardType="default"
                       autoCapitalize="none"
                       className={inputClass}
                     />
                   </Field>
+                  <Text className="mb-3 text-[12px] text-white/60">
+                    They join with the group invite link on the next step —
+                    membership is created by the backend when they accept.
+                  </Text>
                   <TouchableOpacity
                     activeOpacity={0.9}
                     onPress={submitPerson}
-                    disabled={!formValid}
+                    disabled={!formValid || codeLoading}
                     className="mt-1 w-full"
-                    style={{ opacity: formValid ? 1 : 0.45 }}
+                    style={{ opacity: formValid && !codeLoading ? 1 : 0.45 }}
                   >
                     <LinearGradient
-                      colors={formValid ? ['#34D399', '#0E9F6E'] : ['#3a4a52', '#2b363c']}
+                      colors={formValid && !codeLoading ? ['#34D399', '#0E9F6E'] : ['#3a4a52', '#2b363c']}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 0 }}
                       style={{ borderRadius: 16 }}
                     >
                       <View className="items-center py-3.5">
                         <Text className="text-[16px] font-extrabold text-white">
-                          Add Member
+                          {codeLoading ? 'Loading invite…' : 'Continue'}
                         </Text>
                       </View>
                     </LinearGradient>
                   </TouchableOpacity>
+                  {codeError ? (
+                    <Text className="mt-2 text-center text-[12px] font-semibold" style={{ color: CORAL }}>
+                      {codeError}
+                    </Text>
+                  ) : null}
                 </View>
               </GlassShell>
             )}
 
-            {step === 'created' && person && (
-              <View className="items-center pt-6">
-                <View
-                  className="h-20 w-20 items-center justify-center rounded-full"
-                  style={{
-                    backgroundColor: 'rgba(52,211,153,0.18)',
-                    shadowColor: GREEN,
-                    shadowOffset: { width: 0, height: 0 },
-                    shadowOpacity: 0.7,
-                    shadowRadius: 20,
-                    elevation: 10,
-                  }}
-                >
-                  <Ionicons name="checkmark" size={42} color="#FFFFFF" />
-                </View>
-                <Text className="mt-4 text-[22px] font-extrabold text-white">
-                  Member Added
-                </Text>
-                <Text className="mt-1.5 px-6 text-center text-[14px] text-white/75">
-                  {person.name} has been added to your JodTod members
-                  {alreadyExisted ? ' (already existed — no duplicate created)' : ''}.
-                </Text>
-                <TouchableOpacity
-                  activeOpacity={0.9}
-                  onPress={() => setStep('groups')}
-                  className="mt-5 w-full"
-                >
-                  <LinearGradient
-                    colors={['#34D399', '#0E9F6E']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={{ borderRadius: 16 }}
-                  >
-                    <View className="items-center py-3.5">
-                      <Text className="text-[15px] font-extrabold text-white">
-                        Add to a Group
-                      </Text>
-                    </View>
-                  </LinearGradient>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  activeOpacity={0.85}
-                  onPress={() => router.back()}
-                  className="mt-2.5 w-full items-center rounded-2xl border border-white/20 bg-white/10 py-3.5"
-                >
-                  <Text className="text-[15px] font-bold text-white">Done</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {step === 'groups' && person && (
+            {step === 'groups' && (
               <View>
                 <Text className="mb-3 text-[14px] text-white/70">
-                  Add {person.name} to
+                  Invite {name.trim()} to
                 </Text>
-                {selectable.map((g) => (
-                  <TouchableOpacity
-                    key={g.id}
-                    activeOpacity={0.85}
-                    onPress={() => addToGroup(g)}
-                    className="mb-2.5"
-                  >
-                    <GlassShell radius={22} blurTarget={backgroundRef}>
-                      <View className="flex-row items-center p-4">
-                        <View
-                          className="h-12 w-12 items-center justify-center rounded-full border border-white/25"
-                          style={{ backgroundColor: 'rgba(52,211,153,0.16)' }}
-                        >
-                          <Ionicons name="people" size={22} color="#FFFFFF" />
-                        </View>
-                        <View className="ml-3 min-w-0 flex-1">
-                          <Text
-                            className="text-[16px] font-extrabold text-white"
-                            numberOfLines={1}
+                {groupsLoading ? (
+                  <GlassShell radius={22} blurTarget={backgroundRef}>
+                    <View className="items-center p-6">
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    </View>
+                  </GlassShell>
+                ) : groupsError ? (
+                  <GlassShell radius={22} blurTarget={backgroundRef}>
+                    <View className="items-center p-6">
+                      <Text className="text-[14px] font-bold text-white">
+                        Could not load groups
+                      </Text>
+                      <Text className="mt-1 text-[13px] text-white/65">
+                        {groupsError}
+                      </Text>
+                    </View>
+                  </GlassShell>
+                ) : (
+                  groups.map((g) => (
+                    <TouchableOpacity
+                      key={g.id}
+                      activeOpacity={0.85}
+                      disabled={codeLoading}
+                      onPress={() => {
+                        setSelectedGroupId(g.id);
+                        void loadInviteCode(g.id);
+                      }}
+                      className="mb-2.5"
+                    >
+                      <GlassShell radius={22} blurTarget={backgroundRef}>
+                        <View className="flex-row items-center p-4">
+                          <View
+                            className="h-12 w-12 items-center justify-center rounded-full border border-white/25"
+                            style={{ backgroundColor: 'rgba(52,211,153,0.16)' }}
                           >
-                            {g.name}
-                          </Text>
-                          <Text className="mt-0.5 text-[12px] text-white/65">
-                            {g.members.length} members
-                          </Text>
+                            <Ionicons name="people" size={22} color="#FFFFFF" />
+                          </View>
+                          <View className="ml-3 min-w-0 flex-1">
+                            <Text
+                              className="text-[16px] font-extrabold text-white"
+                              numberOfLines={1}
+                            >
+                              {g.name}
+                            </Text>
+                            <Text className="mt-0.5 text-[12px] text-white/65">
+                              {g.memberCount} members
+                            </Text>
+                          </View>
+                          {codeLoading && selectedGroupId === g.id ? (
+                            <ActivityIndicator size="small" color="#FFFFFF" />
+                          ) : (
+                            <Ionicons
+                              name="chevron-forward"
+                              size={18}
+                              color="rgba(255,255,255,0.6)"
+                            />
+                          )}
                         </View>
-                        <Ionicons
-                          name="chevron-forward"
-                          size={18}
-                          color="rgba(255,255,255,0.6)"
-                        />
-                      </View>
-                    </GlassShell>
-                  </TouchableOpacity>
-                ))}
+                      </GlassShell>
+                    </TouchableOpacity>
+                  ))
+                )}
+                {codeError ? (
+                  <Text className="mt-2 text-center text-[12px] font-semibold" style={{ color: CORAL }}>
+                    {codeError}
+                  </Text>
+                ) : null}
               </View>
             )}
 
-            {step === 'added' && addedGroup && addedMember && (
+            {step === 'shared' && inviteLink && (
               <View className="items-center pt-6">
                 <View
                   className="h-20 w-20 items-center justify-center rounded-full"
@@ -375,23 +411,37 @@ export default function AddMember() {
                     elevation: 10,
                   }}
                 >
-                  <Ionicons name="checkmark" size={42} color="#FFFFFF" />
+                  <Ionicons name="link" size={36} color="#FFFFFF" />
                 </View>
                 <Text className="mt-4 text-[22px] font-extrabold text-white">
-                  Added to {addedGroup.name}
+                  Invite ready
                 </Text>
                 <Text className="mt-1.5 px-6 text-center text-[14px] text-white/75">
-                  {addedMember.name} is now{' '}
-                  {memberStatus(addedMember) === 'pending'
-                    ? 'a pending member — the invitation is saved and will link when they join'
-                    : 'an active member'}
-                  {!addedIsNew ? ' (was already in this group)' : ''}.
+                  Share this link with {name.trim()} to invite them to{' '}
+                  {inviteGroupName || selectedGroup?.name}. They will appear
+                  under Members once they join.
                 </Text>
+                <GlassShell radius={22} blurTarget={backgroundRef}>
+                  <View className="mt-5 w-full flex-row items-center p-4">
+                    <Text className="flex-1 text-[13px] font-semibold text-white" numberOfLines={1}>
+                      {inviteLink}
+                    </Text>
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      onPress={() => void copyLink()}
+                      className="ml-2"
+                    >
+                      <Ionicons
+                        name={copied ? 'checkmark' : 'copy-outline'}
+                        size={18}
+                        color="#FFFFFF"
+                      />
+                    </TouchableOpacity>
+                  </View>
+                </GlassShell>
                 <TouchableOpacity
                   activeOpacity={0.9}
-                  onPress={() =>
-                    router.replace(`/(tabs)/groups/${addedGroup.id}` as any)
-                  }
+                  onPress={() => void shareLink()}
                   className="mt-5 w-full"
                 >
                   <LinearGradient
@@ -402,17 +452,20 @@ export default function AddMember() {
                   >
                     <View className="items-center py-3.5">
                       <Text className="text-[15px] font-extrabold text-white">
-                        Open Group
+                        Share Invite
                       </Text>
                     </View>
                   </LinearGradient>
                 </TouchableOpacity>
                 <TouchableOpacity
                   activeOpacity={0.85}
-                  onPress={() => router.back()}
+                  onPress={() =>
+                    selectedGroupId &&
+                    router.replace(`/(tabs)/groups/${selectedGroupId}` as any)
+                  }
                   className="mt-2.5 w-full items-center rounded-2xl border border-white/20 bg-white/10 py-3.5"
                 >
-                  <Text className="text-[15px] font-bold text-white">Done</Text>
+                  <Text className="text-[15px] font-bold text-white">Open Group</Text>
                 </TouchableOpacity>
               </View>
             )}

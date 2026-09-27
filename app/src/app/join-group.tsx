@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -6,18 +6,19 @@ import {
   TouchableOpacity,
   StyleSheet,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView, BlurTargetView } from 'expo-blur';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useAuth } from '../context/AuthContext';
 import {
-  getGroupByJoinToken,
-  joinGroupByToken,
-  useGroups,
-} from '../lib/mockGroups';
+  joinGroupByCode,
+  searchGroupByCode,
+  GroupsApiError,
+  type GroupSummary,
+} from '@/services/groups.api';
 
 const GREEN = '#34D399';
 const CORAL = '#FB7185';
@@ -75,36 +76,93 @@ function GlassShell({
   );
 }
 
+/**
+ * Join via a scanned/copied invite code. The code is validated against
+ * the backend (GET /api/groups/search/by-code) before anything is
+ * shown, and membership is created server-side (POST /api/groups/join).
+ * Group info always comes from the backend, never from the QR payload.
+ */
 export default function JoinGroup() {
   const router = useRouter();
-  const { token } = useLocalSearchParams<{ token?: string }>();
-  const { user } = useAuth();
+  const { code } = useLocalSearchParams<{ code?: string }>();
   const backgroundRef = useRef<View>(null);
-  const allGroups = useGroups();
-  void allGroups;
-  const [joined, setJoined] = useState(false);
-  const [failed, setFailed] = useState(false);
 
-  const cleanToken = typeof token === 'string' ? token.trim() : '';
-  const group = cleanToken ? getGroupByJoinToken(cleanToken) : undefined;
-  const alreadyMember = group?.members.some((m) => m.isYou) ?? false;
+  const cleanCode = typeof code === 'string' ? code.trim().toUpperCase() : '';
+  const [preview, setPreview] = useState<GroupSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [joining, setJoining] = useState(false);
+  const [joinedId, setJoinedId] = useState<string | null>(null);
 
-  const doJoin = () => {
-    if (!cleanToken) return;
-    const displayName = user?.name?.split(' ')[0] ?? 'Rohit';
-    const res = joinGroupByToken(cleanToken, displayName);
-    if (res.status === 'joined') {
-      setJoined(true);
-    } else if (res.status === 'already') {
-      // No-op: screen already shows the member state.
-    } else {
-      setFailed(true);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    void (async () => {
+      if (!cleanCode) {
+        setError('No invite code was provided.');
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      setError(null);
+      try {
+        const group = await searchGroupByCode(cleanCode);
+        if (!mountedRef.current) return;
+        if (!group) {
+          setError('This group invitation is no longer valid.');
+        } else {
+          setPreview(group);
+        }
+      } catch (e) {
+        if (!mountedRef.current) return;
+        if (e instanceof GroupsApiError && e.status === 404) {
+          setError('This group invitation is no longer valid.');
+        } else {
+          setError(e instanceof Error ? e.message : 'Could not validate the invite.');
+        }
+      } finally {
+        if (mountedRef.current) setLoading(false);
+      }
+    })();
+  }, [cleanCode]);
+
+  const doJoin = async () => {
+    if (!cleanCode || joining || joinedId) return;
+    setJoining(true);
+    setError(null);
+    try {
+      const joined = await joinGroupByCode(cleanCode);
+      if (!mountedRef.current) return;
+      if (!joined) {
+        setError('Could not join the group. Please try again.');
+        return;
+      }
+      // Idempotent re-join lands here too: the backend membership is
+      // authoritative either way.
+      setJoinedId(joined.id);
+    } catch (e) {
+      if (!mountedRef.current) return;
+      if (e instanceof GroupsApiError && e.status === 404) {
+        setError('This group invitation is no longer valid.');
+      } else {
+        setError(e instanceof Error ? e.message : 'Could not join the group.');
+      }
+    } finally {
+      if (mountedRef.current) setJoining(false);
     }
   };
 
   const openGroup = (groupId: string) => {
     router.replace(`/(tabs)/groups/${groupId}` as any);
   };
+
+  const invalid = !loading && (!preview || error);
 
   return (
     <View style={{ flex: 1 }}>
@@ -135,7 +193,16 @@ export default function JoinGroup() {
           className="px-4"
           contentContainerStyle={{ paddingBottom: 24 }}
         >
-          {!group || failed ? (
+          {loading ? (
+            <GlassShell radius={22} blurTarget={backgroundRef}>
+              <View className="items-center p-6">
+                <ActivityIndicator size="small" color="#FFFFFF" />
+                <Text className="mt-2 text-[14px] text-white/70">
+                  Validating invite…
+                </Text>
+              </View>
+            </GlassShell>
+          ) : invalid || !preview ? (
             <GlassShell radius={22} blurTarget={backgroundRef}>
               <View className="items-center p-6">
                 <View
@@ -148,7 +215,7 @@ export default function JoinGroup() {
                   Invalid invitation
                 </Text>
                 <Text className="mt-1 px-4 text-center text-[13px] text-white/70">
-                  This group invitation is no longer valid.
+                  {error ?? 'This group invitation is no longer valid.'}
                 </Text>
                 <TouchableOpacity
                   activeOpacity={0.85}
@@ -159,7 +226,7 @@ export default function JoinGroup() {
                 </TouchableOpacity>
               </View>
             </GlassShell>
-          ) : joined || alreadyMember ? (
+          ) : joinedId ? (
             <GlassShell radius={22} blurTarget={backgroundRef}>
               <View className="items-center p-6">
                 <View
@@ -176,16 +243,14 @@ export default function JoinGroup() {
                   <Ionicons name="checkmark" size={32} color="#FFFFFF" />
                 </View>
                 <Text className="mt-3 text-[17px] font-extrabold text-white">
-                  {joined ? `Joined ${group.name}` : 'Already a member'}
+                  Joined {preview.name}
                 </Text>
                 <Text className="mt-1 px-4 text-center text-[13px] text-white/70">
-                  {joined
-                    ? `Welcome to ${group.name}.`
-                    : `You are already a member of ${group.name}.`}
+                  Welcome to {preview.name}. It now appears in your Groups.
                 </Text>
                 <TouchableOpacity
                   activeOpacity={0.9}
-                  onPress={() => openGroup(group.id)}
+                  onPress={() => openGroup(joinedId)}
                   className="mt-4 w-full"
                 >
                   <LinearGradient
@@ -213,18 +278,27 @@ export default function JoinGroup() {
                   <Ionicons name="people" size={30} color="#FFFFFF" />
                 </View>
                 <Text className="mt-3 text-[22px] font-extrabold text-white">
-                  {group.name}
+                  {preview.name}
                 </Text>
                 <Text className="mt-1 text-[14px] text-white/70">
                   You&apos;ve been invited to join this group.
                 </Text>
                 <Text className="mt-0.5 text-[13px] text-white/60">
-                  {group.members.length} members
+                  {preview.member_count === 1
+                    ? '1 member'
+                    : `${preview.member_count} members`}
                 </Text>
+                {error ? (
+                  <Text className="mt-2 text-center text-[12px] font-semibold" style={{ color: CORAL }}>
+                    {error}
+                  </Text>
+                ) : null}
                 <TouchableOpacity
                   activeOpacity={0.9}
-                  onPress={doJoin}
+                  onPress={() => void doJoin()}
+                  disabled={joining}
                   className="mt-5 w-full"
+                  style={{ opacity: joining ? 0.6 : 1 }}
                 >
                   <LinearGradient
                     colors={['#34D399', '#0E9F6E']}
@@ -234,7 +308,7 @@ export default function JoinGroup() {
                   >
                     <View className="items-center py-3.5">
                       <Text className="text-[15px] font-extrabold text-white">
-                        Join Group
+                        {joining ? 'Joining…' : 'Join Group'}
                       </Text>
                     </View>
                   </LinearGradient>

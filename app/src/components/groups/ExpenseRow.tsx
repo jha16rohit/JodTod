@@ -2,7 +2,7 @@ import { Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, inr } from './ui';
-import type { Expense } from '@/lib/mockGroups';
+import type { Expense } from '@/lib/groupAdapters';
 
 export const EXPENSE_ICONS: Record<Expense['icon'], { icon: keyof typeof Ionicons.glyphMap; colors: [string, string] }> = {
   restaurant: { icon: 'restaurant', colors: ['#FF9A8B', '#FF6A88'] },

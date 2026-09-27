@@ -11,7 +11,9 @@
  *   POST /api/groups/join
  *   GET  /api/groups/search/by-code?code=
  *   GET  /api/groups/{group_id}
+ *   PATCH /api/groups/{group_id}
  *   POST /api/groups/{group_id}/members
+ *   DELETE /api/groups/{group_id}/members/me
  *   POST /api/groups/{group_id}/archive
  *   POST /api/groups/{group_id}/invite-code/rotate
  *   GET  /api/groups/{group_id}/suggestions
@@ -308,6 +310,126 @@ export async function joinGroupByCode(inviteCode: string): Promise<GroupSummary 
   );
 }
 
+export interface GroupUpdate {
+  id: string;
+  name: string;
+  description: string | null;
+  group_type: string;
+  currency: string;
+  image_url: string | null;
+  lifecycle: GroupLifecycle;
+  invite_code: string | null;
+}
+
+function groupUpdateOrNull(value: unknown): GroupUpdate | null {
+  if (typeof value !== "object" || value === null) return null;
+  const v = value as Record<string, unknown>;
+  if (typeof v.id !== "string" || typeof v.name !== "string") return null;
+  return {
+    id: v.id,
+    name: v.name,
+    description: asNullableString(v.description),
+    group_type: asString(v.group_type, "other"),
+    currency: asString(v.currency, "INR"),
+    image_url: asNullableString(v.image_url),
+    lifecycle: v.lifecycle === "archived" ? "archived" : "active",
+    invite_code: asNullableString(v.invite_code),
+  };
+}
+
+export async function updateGroup(
+  groupId: string,
+  input: {
+    name?: string;
+    description?: string | null;
+    group_type?: string;
+    image_url?: string | null;
+  },
+): Promise<GroupUpdate | null> {
+  const body: Record<string, unknown> = {};
+  if (input.name !== undefined) body.name = input.name;
+  if (input.group_type !== undefined) body.group_type = input.group_type;
+  if (input.description !== undefined) {
+    if (input.description === null) body.clear_description = true;
+    else body.description = input.description;
+  }
+  if (input.image_url !== undefined) {
+    if (input.image_url === null) body.clear_image_url = true;
+    else body.image_url = input.image_url;
+  }
+  return groupUpdateOrNull(
+    await request<unknown>(`/groups/${encodeURIComponent(groupId)}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  );
+}
+
+export interface AddedGroupMember {
+  user_id: string;
+  display_name: string;
+  avatar_url: string | null;
+  role: string;
+}
+
+export async function addGroupMember(
+  groupId: string,
+  userId: string,
+): Promise<AddedGroupMember | null> {
+  const body = (await request<unknown>(
+    `/groups/${encodeURIComponent(groupId)}/members`,
+    {
+      method: "POST",
+      body: JSON.stringify({ user_id: userId }),
+    },
+  )) as Record<string, unknown>;
+  if (typeof body.user_id !== "string") return null;
+  return {
+    user_id: body.user_id,
+    display_name: asString(body.display_name, "Member"),
+    avatar_url: asNullableString(body.avatar_url),
+    role: asString(body.role, "member"),
+  };
+}
+
+export async function searchGroupByCode(
+  code: string,
+): Promise<GroupSummary | null> {
+  const clean = code.trim().toUpperCase();
+  if (!clean) return null;
+  return groupOrNull(
+    await request<unknown>(
+      `/groups/search/by-code?code=${encodeURIComponent(clean)}`,
+    ),
+  );
+}
+
+/**
+ * Extract a backend invite code from scanned QR text: either a
+ * `jodtod://join-group?code=XXXX` link (or any URL carrying code/token)
+ * or a bare code. Returns null when the payload is not an invitation.
+ */
+export function extractInviteCode(scanned: string): string | null {
+  const text = (scanned ?? "").trim();
+  if (!text) return null;
+  const param = text.match(/[?&#](?:code|token)=([^&#\s]+)/i)
+    ?? text.match(/^(?:jodtod:\/\/join-group\?code=)([^&\s]+)/i);
+  if (param?.[1]) {
+    try {
+      return decodeURIComponent(param[1]).trim().toUpperCase() || null;
+    } catch {
+      return param[1].trim().toUpperCase() || null;
+    }
+  }
+  if (/^[A-Za-z0-9]{4,32}$/.test(text)) return text.toUpperCase();
+  return null;
+}
+
+/** Shareable invite link for a real backend invite code (never an id). */
+export function buildInviteLink(inviteCode: string): string {
+  return `jodtod://join-group?code=${encodeURIComponent(inviteCode.trim().toUpperCase())}`;
+}
+
 export async function archiveGroup(groupId: string): Promise<boolean> {
   await request<unknown>(`/groups/${encodeURIComponent(groupId)}/archive`, { method: "POST" });
   return true;
@@ -383,7 +505,7 @@ export async function createExpense(input: {
   payer_user_id: string;
   split_type: string;
   participant_ids: string[];
-  splits: { user_id: string; amount: string }[];
+  splits: { user_id: string; share_amount: string }[];
   description?: string;
 }): Promise<{
   id: string;

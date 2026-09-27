@@ -2,7 +2,7 @@ import { Image, Text, TouchableOpacity, View } from 'react-native';
 import { Avatar, GlassCard, StatusPill, colors } from './ui';
 import { BalanceSummary } from './BalanceSummary';
 import { MemberStack } from './MemberStack';
-import type { Group } from '@/lib/mockGroups';
+import type { Group } from '@/lib/groupAdapters';
 
 type GroupCardProps = {
   group: Group;

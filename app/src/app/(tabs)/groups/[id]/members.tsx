@@ -7,8 +7,7 @@ import { BubbleBackdrop, ScreenHeader, GlassCard, colors } from '@/components/gr
 import { MemberRow, SheetMenuItem } from '@/components/groups/MemberRow';
 import { useAuth } from '@/context/AuthContext';
 import { fetchGroupDetail, type GroupDetail } from '@/services/groups.api';
-import { membersOf } from '@/lib/groupAdapters';
-import type { Member } from '@/lib/mockGroups';
+import { membersOf, type Member } from '@/lib/groupAdapters';
 
 export default function GroupMembers() {
   const router = useRouter();
@@ -137,11 +136,13 @@ export default function GroupMembers() {
           style={{ backgroundColor: 'rgba(11,61,98,0.35)' }}
         >
           <View className="bg-white rounded-t-[28px] px-5 pt-5 pb-8">
-            <Text className="text-base font-bold mb-4" style={{ color: colors.textDark }}>
+            <Text className="text-base font-bold mb-1" style={{ color: colors.textDark }}>
               {menuFor?.name}
             </Text>
-            <SheetMenuItem icon="shield-checkmark-outline" label="Make Co-Admin" onPress={() => setMenuFor(null)} />
-            <SheetMenuItem icon="person-remove-outline" label="Remove from group" danger onPress={() => setMenuFor(null)} />
+            <Text className="text-[13px] mb-4" style={{ color: colors.textMuted }}>
+              Role and removal actions are not available in this backend
+              version. New members join via the invite link.
+            </Text>
             <SheetMenuItem icon="close" label="Cancel" onPress={() => setMenuFor(null)} />
           </View>
         </TouchableOpacity>

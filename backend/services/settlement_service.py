@@ -45,6 +45,10 @@ from backend.services.balance_service import (
     quantize,
     suggest_payments,
 )
+from backend.services.activity_events import (
+    display_name_of,
+    emit_settlement,
+)
 from backend.services.group_service import (
     GroupNotFoundError,
     GroupService,
@@ -206,6 +210,18 @@ class SettlementService:
             raise SettlementStateError(
                 "This payment was already recorded."
             ) from exc
+        payer = await db.get(User, payer_id)
+        receiver = await db.get(User, receiver_id)
+        await emit_settlement(
+            db,
+            payer_id=payer_id,
+            receiver_id=receiver_id,
+            group_name=group.name,
+            amount=total,
+            payer_name=display_name_of(payer, "Someone"),
+            receiver_name=display_name_of(receiver),
+            status="pending",
+        )
         return row
 
     # ============================================================
@@ -262,6 +278,16 @@ class SettlementService:
             payer = await db.get(User, row.payer_user_id)
             receiver = await db.get(User, row.receiver_user_id)
             group = await db.get(Group, row.group_id)
+            await emit_settlement(
+                db,
+                payer_id=row.payer_user_id,
+                receiver_id=row.receiver_user_id,
+                group_name=group.name if group else "Group",
+                amount=row.amount,
+                payer_name=display_name_of(payer, "Someone"),
+                receiver_name=display_name_of(receiver),
+                status="paid",
+            )
             await NotificationService.wire_settlement_confirmed(
                 db=db,
                 user_id=row.payer_user_id,
@@ -748,6 +774,7 @@ class SettlementService:
                 .all()
             )
         users = {u.id: u for u in member_users}
+        roles = {m.user_id: m.role.value for m in members}
         ledger = await load_ledger(db, group_id)
         nets = member_nets(ledger, member_ids)
         settled = all(v == ZERO for v in nets.values())
@@ -755,6 +782,7 @@ class SettlementService:
         balances = [
             {
                 "user": users[mid],
+                "role": roles.get(mid, "member"),
                 "net_balance": money(nets[mid]),
                 "direction": (
                     "THEY_ARE_OWED"

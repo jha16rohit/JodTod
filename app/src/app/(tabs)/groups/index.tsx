@@ -9,7 +9,7 @@ import { FilterTabs } from '@/components/groups/FilterTabs';
 import { GroupCard } from '@/components/groups/GroupCard';
 import { EmptyState } from '@/components/groups/EmptyState';
 import { fetchMyGroups, type GroupSummary } from '@/services/groups.api';
-import type { Group } from '@/lib/mockGroups';
+import type { Group } from '@/lib/groupAdapters';
 
 type FilterTab = 'All' | 'Active' | 'Completed' | 'Archived';
 const TABS: readonly FilterTab[] = ['All', 'Active', 'Completed', 'Archived'];

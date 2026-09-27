@@ -28,6 +28,7 @@ from backend.services.group_service import (
     GroupService,
     GroupValidationError,
 )
+from backend.services.activity_events import emit_expense_created
 from backend.services.notification_service import NotificationService
 from sqlalchemy import select
 
@@ -185,6 +186,18 @@ class ExpenseService:
 
         payer_user = member_users.get(payer)
         payer_name = payer_user.name if payer_user and payer_user.name else "Someone"
+
+        await emit_expense_created(
+            db,
+            member_ids=sorted(members, key=str),
+            member_users=member_users,
+            group_name=group.name,
+            title=clean_title,
+            total=total,
+            payer_name=payer_name,
+            split_type=split_type,
+            share_map=share_map,
+        )
 
         # Notify all members except the payer
         for member_id in members:

@@ -22,10 +22,9 @@ import {
   hydrateReceipts,
   linkReceiptStatusLabel,
   receiptDateLabel,
-  useGroups,
   useReceipts,
   type Receipt,
-} from '../lib/mockGroups';
+} from '../lib/receipts';
 
 const GREEN = '#34D399';
 const CORAL = '#FB7185';
@@ -168,7 +167,6 @@ export default function AddReceipt() {
   const router = useRouter();
   const backgroundRef = useRef<View>(null);
   const receipts = useReceipts();
-  const groups = useGroups();
 
   const [view, setView] = useState<ViewState>('main');
   const [captureUri, setCaptureUri] = useState<string | null>(null);
@@ -182,18 +180,10 @@ export default function AddReceipt() {
   }, []);
 
   const selected = selectedId ? getReceipt(selectedId) : undefined;
+  // "Expense title • Group name" snapshot stored at link time (the
+  // backend has no receipt endpoint, so the queue stays on-device).
   const linkedExpenseName =
-    selected?.status === 'linked' && selected.linkedExpenseId
-      ? findExpenseTitle(selected.linkedExpenseId)
-      : null;
-
-  function findExpenseTitle(expenseId: string): string | null {
-    for (const g of groups) {
-      const e = g.expenses.find((x) => x.id === expenseId);
-      if (e) return `${e.title} • ${g.name}`;
-    }
-    return null;
-  }
+    selected?.status === 'linked' ? (selected.expenseName ?? null) : null;
 
   const scanBill = async () => {
     if (camBusy) return;

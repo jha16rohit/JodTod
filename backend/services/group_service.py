@@ -18,6 +18,12 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import transaction
+from backend.services.activity_events import (
+    display_name_of,
+    emit_group_created,
+    emit_group_updated,
+    emit_member_joined,
+)
 from backend.models.group import (
     Group,
     GroupLifecycle,
@@ -140,6 +146,13 @@ class GroupService:
                     )
                 )
             await db.flush()
+        creator = await db.get(User, creator_id)
+        await emit_group_created(
+            db,
+            member_ids=sorted(member_ids, key=str),
+            group_name=group.name,
+            creator_name=display_name_of(creator, "Someone"),
+        )
         return group
 
     # ============================================================
@@ -303,6 +316,13 @@ class GroupService:
                         "added_by": requester_name,
                     },
                 )
+            await emit_member_joined(
+                db,
+                member_ids=sorted(member_ids, key=str),
+                group_name=group.name if group else "Group",
+                new_member_name=new_member_name,
+                added_by=requester_name,
+            )
         else:
             row = existing
         return row
@@ -365,6 +385,12 @@ class GroupService:
                         "member_id": str(user_id),
                     },
                 )
+            await emit_member_joined(
+                db,
+                member_ids=sorted(member_ids, key=str),
+                group_name=group.name,
+                new_member_name=new_member_name,
+            )
         return group
 
     @staticmethod
@@ -404,6 +430,78 @@ class GroupService:
                 oldest.role = MemberRole.ADMIN
                 await db.flush()
         return "left"
+
+    @staticmethod
+    async def update_group(
+        db: AsyncSession,
+        user_id: UUID,
+        group_id: UUID,
+        name: str | None = None,
+        description: str | None = None,
+        group_type: str | None = None,
+        image_url: str | None = None,
+        clear_description: bool = False,
+        clear_image_url: bool = False,
+    ) -> Group:
+        """Update a group's editable fields (admins only)."""
+        membership = await GroupService.require_membership(
+            db, user_id, group_id
+        )
+        if membership.role != MemberRole.ADMIN:
+            raise GroupPermissionError(
+                "Only a group admin can edit the group."
+            )
+        if (
+            name is None
+            and description is None
+            and not clear_description
+            and group_type is None
+            and image_url is None
+            and not clear_image_url
+        ):
+            raise GroupValidationError("Nothing to update.")
+        group = await db.get(Group, group_id)
+        if group is None:  # pragma: no cover - membership implies group
+            raise GroupNotFoundError("Group not found.")
+        if name is not None:
+            clean_name = name.strip()
+            if not clean_name or len(clean_name) > 120:
+                raise GroupValidationError(
+                    "Group name is required (max 120 characters)."
+                )
+            group.name = clean_name
+        if clear_description:
+            group.description = None
+        elif description is not None:
+            if len(description) > 500:
+                raise GroupValidationError(
+                    "Description must be at most 500 characters."
+                )
+            group.description = description.strip() or None
+        if group_type is not None:
+            if group_type not in VALID_GROUP_TYPES:
+                raise GroupValidationError(
+                    f"Unsupported group type: {group_type}."
+                )
+            group.group_type = GroupType(group_type)
+        if clear_image_url:
+            group.image_url = None
+        elif image_url is not None:
+            if len(image_url) > 500:
+                raise GroupValidationError(
+                    "Image URL must be at most 500 characters."
+                )
+            group.image_url = image_url.strip() or None
+        async with transaction(db):
+            await db.flush()
+        member_ids = await GroupService.member_user_ids(db, group_id)
+        if member_ids:
+            await emit_group_updated(
+                db,
+                member_ids=sorted(member_ids, key=str),
+                group_name=group.name,
+            )
+        return group
 
     @staticmethod
     async def archive(

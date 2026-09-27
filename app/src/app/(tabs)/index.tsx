@@ -22,13 +22,20 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import { useAuth } from '../../context/AuthContext';
+import { useFocusEffect } from 'expo-router';
+import { fetchMyGroups, type GroupSummary } from '../../services/groups.api';
+import { fetchPeople, type PersonSummary } from '../../services/settlements.api';
+import { fetchActivities, type BackendActivity } from '../../services/activity.api';
+import { parseAmountToPaise } from '../../lib/money';
 
 const GREEN = '#34D399';
 const CYAN = '#22D3EE';
 const CORAL = '#FB7185';
 
 // ---------------------------------------------------------------------------
-// Static display data (reference content; backend integration comes later)
+// Real backend data (groups, people, recent expense activity).
+// No hardcoded financial/user data: everything below derives from the
+// API at runtime, with neutral placeholders while loading.
 // ---------------------------------------------------------------------------
 
 const getGreeting = () => {
@@ -39,65 +46,55 @@ const getGreeting = () => {
   return 'Good Night,';
 };
 
-const groups = [
-  { name: 'Goa Trip', members: '5 members', amount: '₹12,450', icon: 'airplane', tint: '#34D399' },
-  { name: 'Flatmates', members: '4 members', amount: '₹8,320', icon: 'home', tint: '#38BDF8' },
-];
+const TINTS = ['#34D399', '#22D3EE', '#A78BFA', '#38BDF8', '#FB7185', '#FBBF24'];
+const GROUP_ICONS = ['airplane', 'home', 'car', 'people', 'briefcase', 'cart'];
+const EXPENSE_ICONS = ['cafe', 'restaurant', 'cart', 'receipt', 'fast-food', 'beer'] as const;
+const EXPENSE_TINTS = ['#FB923C', '#C084FC', '#34D399', '#38BDF8', '#FBBF24', '#FB7185'];
 
-const expenses = [
-  {
-    title: 'Cafe Coffee Day',
-    meta: 'Goa Trip • Today, 8:24 AM',
-    amount: '₹450',
-    status: 'You paid',
-    statusStyle: 'paid' as const,
-    icon: 'cafe',
-    iconColor: '#FB923C',
-  },
-  {
-    title: 'Dinner at Marina',
-    meta: 'Flatmates • Yesterday, 9:12 PM',
-    amount: '₹1,200',
-    status: 'Split equally',
-    statusStyle: 'split' as const,
-    icon: 'restaurant',
-    iconColor: '#C084FC',
-  },
-  {
-    title: 'Groceries',
-    meta: 'Flatmates • Apr 14, 2025',
-    amount: '₹980',
-    status: 'You paid',
-    statusStyle: 'paid' as const,
-    icon: 'cart',
-    iconColor: '#34D399',
-  },
-];
+/** Backend "X.XX" money string → paise integer (never float). */
+function toPaiseSafe(raw: string | null | undefined): number {
+  if (!raw) return 0;
+  return parseAmountToPaise(raw, { allowZero: true, allowNegative: true }) ?? 0;
+}
 
-const flowLeft = [
-  { name: 'AMAN', amount: '₹1,200', initial: 'A', tint: '#34D399' },
-  { name: 'NEHA', amount: '₹850', initial: 'N', tint: '#22D3EE' },
-  { name: 'ROHIT', amount: '₹650', initial: 'R', tint: '#A78BFA' },
-];
+function fmtINR(paise: number): string {
+  const whole = paise % 100 === 0;
+  return `₹${(paise / 100).toLocaleString('en-IN', {
+    minimumFractionDigits: whole ? 0 : 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
 
-const flowRight = [
-  { name: 'RAHUL', amount: '₹500', initial: 'R', tint: '#38BDF8' },
-  { name: 'PRIYA', amount: '₹300', initial: 'P', tint: '#FB7185' },
-  { name: 'KARAN', amount: '₹180', initial: 'K', tint: '#FBBF24' },
-];
+function tintFor(name: string): string {
+  let sum = 0;
+  for (let i = 0; i < name.length; i += 1) sum += name.charCodeAt(i);
+  return TINTS[sum % TINTS.length];
+}
 
-// OWE-direction datasets: people the user must pay (outgoing amounts).
-const oweLeft = [
-  { name: 'AMAN', amount: '₹900', initial: 'A', tint: '#FB7185' },
-  { name: 'NEHA', amount: '₹420', initial: 'N', tint: '#F59E0B' },
-  { name: 'ROHIT', amount: '₹310', initial: 'R', tint: '#FB7185' },
-];
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return (parts[0].charAt(0) ?? '?').toUpperCase();
+  return `${parts[0].charAt(0)}${parts[parts.length - 1].charAt(0)}`.toUpperCase();
+}
 
-const oweRight = [
-  { name: 'RAHUL', amount: '₹380', initial: 'R', tint: '#F59E0B' },
-  { name: 'PRIYA', amount: '₹260', initial: 'P', tint: '#FB7185' },
-  { name: 'KARAN', amount: '₹150', initial: 'K', tint: '#F59E0B' },
-];
+function activityDateLabel(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const now = new Date();
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday =
+    d.getFullYear() === yesterday.getFullYear() &&
+    d.getMonth() === yesterday.getMonth() &&
+    d.getDate() === yesterday.getDate();
+  if (sameDay) return 'Today';
+  if (isYesterday) return 'Yesterday';
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+}
 
 // Connector geometry in the 320x250 map space. TOWARD curves run pill edge
 // -> avatar edge (arrowhead lands just outside the face = money flowing in).
@@ -211,11 +208,11 @@ function GlassShell({
   );
 }
 
-function SectionHeader({ title }: { title: string }) {
+function SectionHeader({ title, onSeeAll }: { title: string; onSeeAll?: () => void }) {
   return (
     <View className="mb-2.5 flex-row items-center justify-between">
       <Text className="text-[17px] font-extrabold text-white">{title}</Text>
-      <TouchableOpacity activeOpacity={0.7} className="flex-row items-center">
+      <TouchableOpacity activeOpacity={0.7} className="flex-row items-center" onPress={onSeeAll}>
         <Text className="mr-1 text-[12px] font-semibold text-white/70">See all</Text>
         <Ionicons name="chevron-forward" size={14} color="rgba(255,255,255,0.7)" />
       </TouchableOpacity>
@@ -289,20 +286,150 @@ function FlowDots({
 // Home screen (content only — tab bar lives in the parent layout)
 // ---------------------------------------------------------------------------
 
+type HomeGroup = {
+  name: string;
+  members: string;
+  amount: string;
+  icon: string;
+  tint: string;
+};
+
+type FlowPerson = { name: string; amount: string; initial: string; tint: string };
+
+type RecentExpense = {
+  title: string;
+  meta: string;
+  amount: string;
+  status: string;
+  statusStyle: 'paid' | 'split';
+  icon: (typeof EXPENSE_ICONS)[number];
+  iconColor: string;
+};
+
 export default function Home() {
   const router = useRouter();
   const { user } = useAuth();
-  const displayName = user?.name?.split(' ')[0] || 'Rohit';
+  const displayName = user?.name?.split(' ')[0] || 'there';
   const backgroundRef = useRef<View>(null);
   const [flowTab, setFlowTab] = useState<'get' | 'owe'>('get');
+
+  const [homeGroups, setHomeGroups] = useState<GroupSummary[]>([]);
+  const [homePeople, setHomePeople] = useState<PersonSummary[]>([]);
+  const [homeActivities, setHomeActivities] = useState<BackendActivity[]>([]);
+  const [homeLoading, setHomeLoading] = useState(true);
+  const [homeError, setHomeError] = useState<string | null>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const loadHome = React.useCallback(async () => {
+    setHomeLoading(true);
+    setHomeError(null);
+    try {
+      const [groups, people, activities] = await Promise.all([
+        fetchMyGroups(),
+        fetchPeople('all', undefined, 50, 0).then(
+          (r) => r.people,
+          () => [] as PersonSummary[],
+        ),
+        fetchActivities({ type: 'expense' }).then(
+          (rows) => rows.slice(0, 5),
+          () => [] as BackendActivity[],
+        ),
+      ]);
+      if (!mountedRef.current) return;
+      setHomeGroups(groups);
+      setHomePeople(people);
+      setHomeActivities(activities);
+    } catch (e) {
+      if (!mountedRef.current) return;
+      setHomeError(e instanceof Error ? e.message : 'Could not load home.');
+    } finally {
+      if (mountedRef.current) setHomeLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      mountedRef.current = true;
+      void loadHome();
+      return () => {
+        mountedRef.current = false;
+      };
+    }, [loadHome]),
+  );
+
+  const totalOwed = homeGroups.reduce((s, g) => s + toPaiseSafe(g.you_are_owed), 0);
+  const totalOwe = homeGroups.reduce((s, g) => s + toPaiseSafe(g.you_owe), 0);
+
+  const theyOweMe = homePeople
+    .filter((p) => toPaiseSafe(p.they_owe) > 0)
+    .sort((a, b) => toPaiseSafe(b.they_owe) - toPaiseSafe(a.they_owe));
+  const iOweThem = homePeople
+    .filter((p) => toPaiseSafe(p.you_owe) > 0)
+    .sort((a, b) => toPaiseSafe(b.you_owe) - toPaiseSafe(a.you_owe));
+
+  const toFlow = (p: PersonSummary, amount: string): FlowPerson => ({
+    name: p.display_name.toUpperCase(),
+    amount,
+    initial: initialsOf(p.display_name),
+    tint: tintFor(p.display_name),
+  });
+  const flowLeft: FlowPerson[] = (flowTab === 'get' ? theyOweMe : iOweThem)
+    .slice(0, 3)
+    .map((p) =>
+      toFlow(p, fmtINR(toPaiseSafe(flowTab === 'get' ? p.they_owe : p.you_owe))),
+    );
+  const flowRight: FlowPerson[] = (flowTab === 'get' ? theyOweMe : iOweThem)
+    .slice(3, 6)
+    .map((p) =>
+      toFlow(p, fmtINR(toPaiseSafe(flowTab === 'get' ? p.they_owe : p.you_owe))),
+    );
+
+  const groups: HomeGroup[] = homeGroups.slice(0, 2).map((g, i) => {
+    const owed = toPaiseSafe(g.you_are_owed);
+    const owe = toPaiseSafe(g.you_owe);
+    const net = owed - owe;
+    return {
+      name: g.name,
+      members:
+        g.member_count === 1 ? '1 member' : `${g.member_count} members`,
+      amount: homeLoading ? '…' : fmtINR(Math.abs(net)),
+      icon: GROUP_ICONS[i % GROUP_ICONS.length],
+      tint: tintFor(g.name),
+    };
+  });
+
+  const myKey = (user?.name ?? '').trim().toLowerCase();
+  const expenses: RecentExpense[] = homeActivities.slice(0, 3).map((a, i) => {
+    const mine =
+      myKey.length > 0 &&
+      (a.actor_name ?? '').trim().toLowerCase() === myKey;
+    return {
+      title: a.title,
+      meta: `${a.group_name ?? 'Group'} • ${activityDateLabel(a.occurred_at)}`,
+      amount: a.amount ?? '',
+      status: mine ? 'You paid' : 'Split',
+      statusStyle: mine ? ('paid' as const) : ('split' as const),
+      icon: EXPENSE_ICONS[(a.title.length + i) % EXPENSE_ICONS.length],
+      iconColor: EXPENSE_TINTS[(a.title.length + i) % EXPENSE_TINTS.length],
+    };
+  });
 
   // Single source of truth for the financial direction. Header pill,
   // balance card, people amounts, and arrow geometry all read from this.
   const isGet = flowTab === 'get';
+  const finAmount = isGet ? totalOwed : totalOwe;
+  const finPeopleCount = isGet ? theyOweMe.length : iOweThem.length;
   const fin = {
     label: isGet ? 'You will get' : 'You owe',
-    amount: isGet ? '₹3,680' : '₹1,250',
-    sub: isGet ? 'Across 5 people • 4 groups' : 'Across 3 people • 2 groups',
+    amount: homeLoading ? '…' : fmtINR(finAmount),
+    sub: `Across ${finPeopleCount} ${finPeopleCount === 1 ? 'person' : 'people'} • ${homeGroups.length} ${homeGroups.length === 1 ? 'group' : 'groups'}`,
     arrow: isGet ? 'arrow-up' : 'arrow-down',
     accent: isGet ? '#34D399' : '#FB7185',
     accentSoft: isGet ? 'rgba(52,211,153,0.16)' : 'rgba(251,113,133,0.16)',
@@ -310,8 +437,8 @@ export default function Home() {
       string,
       string,
     ],
-    left: isGet ? flowLeft : oweLeft,
-    right: isGet ? flowRight : oweRight,
+    left: flowLeft,
+    right: flowRight,
     amountLeft: isGet ? GREEN : '#FB7185',
     amountRight: isGet ? CYAN : '#FB7185',
     strokeLeft: isGet ? GREEN : '#FB7185',
@@ -395,12 +522,14 @@ export default function Home() {
             <View className="flex-row items-center gap-2">
               <TouchableOpacity
                 activeOpacity={0.8}
+                onPress={() => router.push('/(tabs)/groups' as any)}
                 className="h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-white/10"
               >
                 <Ionicons name="search" size={20} color="#FFFFFF" />
               </TouchableOpacity>
             <TouchableOpacity
               activeOpacity={0.8}
+              onPress={() => router.push('/(tabs)/notifications' as any)}
               className="h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-white/10"
             >
               <Ionicons name="notifications" size={20} color="#FFFFFF" />
@@ -417,6 +546,19 @@ export default function Home() {
             </TouchableOpacity>
             </View>
           </View>
+
+          {homeError ? (
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => void loadHome()}
+              className="mb-3 flex-row items-center justify-center rounded-2xl border border-white/20 bg-white/10 px-4 py-3"
+            >
+              <Ionicons name="cloud-offline-outline" size={16} color="#FFFFFF" />
+              <Text className="ml-2 text-[13px] font-bold text-white">
+                Couldn&apos;t refresh home — tap to retry
+              </Text>
+            </TouchableOpacity>
+          ) : null}
 
           {/* Get / Owe toggle — both states always visible, tap either half */}
           <View className="mb-3">
@@ -582,6 +724,7 @@ export default function Home() {
 
                 <TouchableOpacity
                   activeOpacity={0.8}
+                  onPress={() => router.push('/(tabs)/settle' as any)}
                   className="ml-2 h-[44px] w-[118px] flex-row items-center justify-center rounded-full border border-white/25 bg-white/10"
                 >
                   <Text className="mr-1 text-[11px] font-bold text-white">
@@ -601,7 +744,7 @@ export default function Home() {
                   <View className="flex-1 flex-row items-stretch justify-between gap-1.5">
                     {/* Left people */}
                     <View className="flex-[30] justify-between py-1">
-                      {(isGet ? flowLeft : oweLeft).map((p) => (
+                      {fin.left.map((p) => (
                         <View
                           key={p.name}
                           className="flex-row items-center rounded-xl border border-white/20 bg-white/10 px-1.5 py-1.5"
@@ -660,7 +803,7 @@ export default function Home() {
 
                     {/* Right people */}
                     <View className="flex-[30] justify-between py-1">
-                      {(isGet ? flowRight : oweRight).map((p) => (
+                      {fin.right.map((p) => (
                         <View
                           key={p.name}
                           className="flex-row items-center rounded-xl border border-white/20 bg-white/10 px-1.5 py-1.5"
@@ -796,13 +939,33 @@ export default function Home() {
                     ))}
                   </Svg>
                 </View>
+                {fin.left.length === 0 && fin.right.length === 0 && !homeLoading ? (
+                  <Text className="pb-3 text-center text-[12px] text-white/60">
+                    No outstanding balances — add an expense to get started.
+                  </Text>
+                ) : null}
               </View>
             </GlassShell>
           </View>
 
           {/* Your Groups */}
           <View className="mb-4">
-            <SectionHeader title="Your Groups" />
+            <SectionHeader
+              title="Your Groups"
+              onSeeAll={() => router.push('/(tabs)/groups' as any)}
+            />
+            {groups.length === 0 && !homeLoading ? (
+              <GlassShell radius={24} blurTarget={backgroundRef}>
+                <View className="items-center p-5">
+                  <Text className="text-[14px] font-bold text-white">
+                    No groups yet
+                  </Text>
+                  <Text className="mt-1 text-center text-[13px] text-white/65">
+                    Create a group to start splitting expenses.
+                  </Text>
+                </View>
+              </GlassShell>
+            ) : (
             <View className="flex-row gap-2.5">
               {groups.map((group) => (
                 <View key={group.name} className="flex-1">
@@ -853,18 +1016,32 @@ export default function Home() {
                       pointerEvents="none"
                       style={[StyleSheet.absoluteFill, { borderRadius: 24 }]}
                     />
-                  </GlassShell>
+                    </GlassShell>
                 </View>
               ))}
             </View>
+            )}
           </View>
 
           {/* Recent Expenses */}
           <View className="mb-2">
-            <SectionHeader title="Recent Expenses" />
+            <SectionHeader
+              title="Recent Expenses"
+              onSeeAll={() => router.push('/(tabs)/activity' as any)}
+            />
             <GlassShell radius={24} blurTarget={backgroundRef}>
               <View className="px-3.5 py-1.5">
-                {expenses.map((expense, index) => (
+                {expenses.length === 0 && !homeLoading ? (
+                  <View className="items-center py-5">
+                    <Text className="text-[14px] font-bold text-white">
+                      No recent activity yet
+                    </Text>
+                    <Text className="mt-1 text-center text-[13px] text-white/65">
+                      Expenses you add will appear here.
+                    </Text>
+                  </View>
+                ) : (
+                expenses.map((expense, index) => (
                   <View
                     key={expense.title}
                     className="flex-row items-center py-3"
@@ -932,7 +1109,8 @@ export default function Home() {
                       </View>
                     </View>
                   </View>
-                ))}
+                ))
+                )}
               </View>
             </GlassShell>
           </View>

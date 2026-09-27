@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -19,13 +19,42 @@ import { BlurView, BlurTargetView } from 'expo-blur';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../context/AuthContext';
-import { formatINR, parseAmountToPaise } from '../lib/mockGroups';
-import { createExpense } from '@/services/groups.api';
+import {
+  equalSplit,
+  formatINR,
+  paiseToDecimalString,
+  parseAmountToPaise,
+  percentageShares,
+  sharesToPayload,
+  sumShares,
+  type ExpenseShare,
+  type SplitMethod,
+} from '../lib/money';
+import {
+  getReceipt,
+  linkReceiptToExpense,
+} from '../lib/receipts';
+import {
+  createExpense,
+  fetchGroupDetail,
+  fetchMyGroups,
+  GroupsApiError,
+  type GroupDetail,
+} from '@/services/groups.api';
 
 const GREEN = '#34D399';
 const CORAL = '#FB7185';
 
 type Step = 'group' | 'details' | 'split' | 'review' | 'success';
+
+type GroupOption = { id: string; name: string; memberCount: number };
+type MemberOption = { id: string; name: string; isYou: boolean };
+type ItemDraft = {
+  id: string;
+  name: string;
+  amountText: string;
+  participantIds: string[];
+};
 
 // ---------------------------------------------------------------------------
 // Dark-glass primitives (same language as Home)
@@ -100,11 +129,9 @@ function InlineError({ text }: { text: string | null }) {
 }
 
 function MemberAvatar({
-  uri,
   isYou,
   size = 40,
 }: {
-  uri?: string | null;
   isYou?: boolean;
   size?: number;
 }) {
@@ -114,11 +141,7 @@ function MemberAvatar({
       style={{ width: size, height: size }}
     >
       <Image
-        source={
-          isYou || !uri
-            ? require('../../assets/images/jodtod/people.png')
-            : { uri }
-        }
+        source={require('../../assets/images/jodtod/people.png')}
         resizeMode="cover"
         style={{ width: '100%', height: '100%' }}
       />
@@ -132,76 +155,139 @@ function MemberAvatar({
 
 export default function AddExpense() {
   const router = useRouter();
-  const { receiptId } = useLocalSearchParams<{ receiptId?: string }>();
+  const { receiptId, groupId: presetGroupId } = useLocalSearchParams<{
+    receiptId?: string;
+    groupId?: string;
+  }>();
   const { user } = useAuth();
   const backgroundRef = useRef<View>(null);
 
-  // Incoming receipt from Add Receipt screen (snapshot at mount).
+  // Incoming receipt from the Add Receipt queue (snapshot at mount).
   const incomingReceipt =
     typeof receiptId === 'string' ? getReceipt(receiptId) : undefined;
 
   const [step, setStep] = useState<Step>('group');
-  const [groupId, setGroupId] = useState<string | null>(null);
+  const [groupOptions, setGroupOptions] = useState<GroupOption[]>([]);
+  const [groupsLoading, setGroupsLoading] = useState(true);
+  const [groupsError, setGroupsError] = useState<string | null>(null);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(
+    typeof presetGroupId === 'string' ? presetGroupId : null,
+  );
+  const [detail, setDetail] = useState<GroupDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+
   const [title, setTitle] = useState(() => incomingReceipt?.expenseName ?? '');
   const [amountText, setAmountText] = useState(() =>
     incomingReceipt?.amountPaise != null
       ? String(incomingReceipt.amountPaise / 100)
-      : ''
+      : '',
   );
   const [payerId, setPayerId] = useState<string | null>(null);
   const [receiptUri, setReceiptUri] = useState<string | null>(
-    () => incomingReceipt?.imageUri ?? null
+    () => incomingReceipt?.imageUri ?? null,
   );
   const [camBusy, setCamBusy] = useState(false);
   const [camError, setCamError] = useState<string | null>(null);
-  const [splitMethod, setSplitMethod] = useState<'equal' | 'unequal' | 'percentage' | 'item-wise'>('equal');
-  const [unequalIncluded, setUnequalIncluded] = useState<string[]>([]);
+
+  const [splitMethod, setSplitMethod] = useState<SplitMethod>('equal');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [unequalAmounts, setUnequalAmounts] = useState<Record<string, string>>({});
-  const [percentageInputs, setPercentageInputs] = useState<Record<string, number>>({});
-  const [itemWiseItems, setItemWiseItems] = useState<
-    { name: string; amount: string; participantIds: string[] }[]
-  >([]);
+  const [percentageInputs, setPercentageInputs] = useState<Record<string, string>>({});
+  const [items, setItems] = useState<ItemDraft[]>([]);
+
   const [touchedDetails, setTouchedDetails] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [created, setCreated] = useState<null | { id: string }>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [created, setCreated] = useState<{
+    id: string;
+    title: string;
+    groupName: string;
+  } | null>(null);
 
-  // Groups list - use real API; fall back to empty for UI until mount.
-  const [groups, setGroups] = useState<{ id: string; name: string }[]>([]);
-  const [selectedGroup, setSelectedGroup] = useState<{ id: string; name: string } | null>(null);
+  // --- Groups list (real backend) ---
+  const loadGroups = async () => {
+    setGroupsLoading(true);
+    setGroupsError(null);
+    try {
+      const rows = await fetchMyGroups();
+      setGroupOptions(
+        rows.map((g) => ({
+          id: g.id,
+          name: g.name,
+          memberCount: g.member_count,
+        })),
+      );
+    } catch (e) {
+      setGroupOptions([]);
+      setGroupsError(e instanceof Error ? e.message : 'Could not load groups.');
+    } finally {
+      setGroupsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    void (async () => {
-      try {
-        const rows = await fetchMyGroups();
-        setGroups(rows.map((g) => ({ id: g.id, name: g.name })));
-        if (groups.length > 0 && !selectedGroup) setSelectedGroup(rows[0]);
-      } catch {
-        // Keep empty state; user can select a group manually.
-      }
-    })();
+    void loadGroups();
   }, []);
 
-  const selectable = groups.filter((g) => g.id !== undefined);
-
-  const group: { id: string; name: string } | undefined = selectedGroup
-    ? selectable.find((g) => g.id === selectedGroup.id)
-    : undefined;
-  // Fetch real members when group is selected.
-  const [detail, setDetail] = useState(null);
-  useEffect(() => {
-    if (group?.id) {
-      void (async () => {
-        const d = await fetchGroupDetail(group.id);
-        setDetail(d);
-      })();
+  // --- Group detail (real members) ---
+  const loadDetail = async (id: string) => {
+    setDetailLoading(true);
+    setDetailError(null);
+    try {
+      const d = await fetchGroupDetail(id);
+      setDetail(d);
+      if (d) {
+        const ids = d.members.map((m) => m.user_id);
+        setSelectedIds(ids);
+        setPayerId((prev) =>
+          prev && ids.includes(prev)
+            ? prev
+            : (d.members.find((m) => m.user_id === user?.id)?.user_id ??
+              ids[0] ??
+              null),
+        );
+      }
+    } catch (e) {
+      setDetail(null);
+      setDetailError(e instanceof Error ? e.message : 'Could not load group.');
+    } finally {
+      setDetailLoading(false);
     }
-  }, [group?.id]);
+  };
 
-  const members = detail?.members?.map((m) => ({
-    id: m.user_id,
-    name: m.display_name,
-    isYou: m.user_id === user?.id,
-  })) ?? [];
+  useEffect(() => {
+    if (selectedGroupId) {
+      void loadDetail(selectedGroupId);
+    } else {
+      setDetail(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedGroupId]);
+
+  // Preset group from expenses screen / receipts: skip group selection.
+  useEffect(() => {
+    if (
+      typeof presetGroupId === 'string' &&
+      presetGroupId &&
+      groupOptions.some((g) => g.id === presetGroupId)
+    ) {
+      setSelectedGroupId(presetGroupId);
+      setStep('details');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupOptions]);
+
+  const selectedGroup = groupOptions.find((g) => g.id === selectedGroupId) ?? null;
+
+  const members: MemberOption[] = useMemo(() => {
+    if (!detail) return [];
+    return detail.members.map((m) => ({
+      id: m.user_id,
+      name: m.display_name,
+      isYou: user?.id != null && m.user_id === user.id,
+    }));
+  }, [detail, user?.id]);
 
   const effectivePayerId =
     payerId && members.some((m) => m.id === payerId)
@@ -209,60 +295,138 @@ export default function AddExpense() {
       : (members.find((m) => m.isYou)?.id ?? members[0]?.id ?? null);
   const payer = members.find((m) => m.id === effectivePayerId) ?? null;
 
-  const amount = parseAmountToPaise(amountText); // returns paise integer or null
+  const amountPaise = parseAmountToPaise(amountText);
 
-  // --- Equal split memo: returns shares in paise per member ID ---
-  const equalShares = useMemo(() => {
-    if (amount === null || members.length === 0) return [];
-    const memberIds = members.map((m) => m.id);
-    return equalSplit(amount, memberIds);
-  }, [amount, members]);
+  const participants = useMemo(
+    () => members.filter((m) => selectedIds.includes(m.id)),
+    [members, selectedIds],
+  );
 
-  // --- Unequal rows memo ---
-  const unequalRows = useMemo(() => {
-    return members.map((m) => {
-      const included = unequalIncluded.includes(m.id);
-      const paise = included ? parseAmountToPaise(unequalAmounts[m.id] ?? '') : 0;
-      return { member: m, included, paise };
+  // --- Equal shares (paise-exact, selection order) ---
+  const equalShares: ExpenseShare[] = useMemo(() => {
+    if (amountPaise === null || participants.length === 0) return [];
+    return equalSplit(
+      amountPaise,
+      participants.map((m) => m.id),
+    );
+  }, [amountPaise, participants]);
+
+  // --- Unequal ---
+  const unequalShares: ExpenseShare[] = useMemo(() => {
+    return participants.flatMap((m) => {
+      const paise = parseAmountToPaise(unequalAmounts[m.id] ?? '');
+      return paise === null ? [] : [{ memberId: m.id, amountPaise: paise }];
     });
-  }, [members, unequalIncluded, unequalAmounts]);
-
-  const unequalTotal = unequalRows.reduce((s, r) => s + (r.paise ?? 0), 0);
-  const unequalInvalidRows = unequalRows.filter(
-    (r) => r.included && r.paise === null
-  ).length;
-  const unequalRemaining =
-    amount === null ? null : amount - unequalTotal;
+  }, [participants, unequalAmounts]);
+  const unequalTotal = sumShares(unequalShares);
+  const unequalInvalid =
+    participants.some(
+      (m) => parseAmountToPaise(unequalAmounts[m.id] ?? '') === null,
+    ) && participants.length > 0;
+  const unequalRemaining = amountPaise === null ? null : amountPaise - unequalTotal;
   const unequalValid =
-    amount !== null &&
-    unequalRows.some((r) => r.included) &&
-    unequalInvalidRows === 0 &&
-    unequalRemaining === 0;
+    amountPaise !== null &&
+    participants.length > 0 &&
+    !unequalInvalid &&
+    unequalRemaining === 0 &&
+    unequalShares.length === participants.length;
 
-  // --- Percentage validation ---
-  const percentageTotal = useMemo(() => {
-    return Object.values(percentageInputs).reduce((sum, p) => sum + p, 0);
-  }, [percentageInputs]);
+  // --- Percentage ---
+  const percentageValues = useMemo(() => {
+    const out: { memberId: string; percent: number }[] = [];
+    for (const m of participants) {
+      const raw = (percentageInputs[m.id] ?? '').trim();
+      if (!raw) continue;
+      const num = Number(raw);
+      if (!Number.isFinite(num) || num < 0 || num > 100) {
+        out.push({ memberId: m.id, percent: NaN });
+        continue;
+      }
+      out.push({ memberId: m.id, percent: num });
+    }
+    return out;
+  }, [participants, percentageInputs]);
+  const percentageTotal = percentageValues.reduce(
+    (sum, e) => sum + (Number.isFinite(e.percent) ? e.percent : 0),
+    0,
+  );
+  const percentageNumbersValid =
+    percentageValues.length === participants.length &&
+    percentageValues.every((e) => Number.isFinite(e.percent));
   const percentageValid =
-    amount !== null &&
-    percentageTotal <= 100 &&
-    Math.abs(percentageTotal - 100) < 0.01;
+    amountPaise !== null &&
+    participants.length > 0 &&
+    percentageNumbersValid &&
+    Math.abs(percentageTotal - 100) < 0.005;
+  const percentageComputed: ExpenseShare[] = useMemo(() => {
+    if (amountPaise === null || !percentageValid) return [];
+    return percentageShares(
+      amountPaise,
+      percentageValues.map((e) => ({ memberId: e.memberId, percent: e.percent })),
+    );
+  }, [amountPaise, percentageValid, percentageValues]);
 
-  // --- Item-wise validation ---
-  const itemWiseTotal = useMemo(() => {
-    return itemWiseItems.reduce((sum, item) => sum + parseAmountToPaise(item.amount), 0);
-  }, [itemWiseItems]);
+  // --- Item-wise ---
+  const itemStates = useMemo(() => {
+    return items.map((item) => {
+      const paise = parseAmountToPaise(item.amountText);
+      const ids = item.participantIds.filter((pid) =>
+        members.some((m) => m.id === pid),
+      );
+      return { item, paise, shares: paise === null || ids.length === 0 ? [] : equalSplit(paise, ids) };
+    });
+  }, [items, members]);
+  const itemWiseTotal = itemStates.reduce(
+    (sum, s) => sum + (s.paise ?? 0),
+    0,
+  );
   const itemWiseValid =
-    amount !== null && itemWiseTotal === amount;
+    amountPaise !== null &&
+    items.length > 0 &&
+    itemStates.every(
+      (s) =>
+        s.paise !== null &&
+        s.item.name.trim().length > 0 &&
+        s.shares.length > 0,
+    ) &&
+    itemWiseTotal === amountPaise;
+  const itemWiseShares: ExpenseShare[] = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const s of itemStates) {
+      for (const share of s.shares) {
+        totals.set(share.memberId, (totals.get(share.memberId) ?? 0) + share.amountPaise);
+      }
+    }
+    return [...totals.entries()].map(([memberId, total]) => ({
+      memberId,
+      amountPaise: total,
+    }));
+  }, [itemStates]);
+
+  const splitValid =
+    splitMethod === 'equal'
+      ? participants.length > 0 && amountPaise !== null
+      : splitMethod === 'unequal'
+        ? unequalValid
+        : splitMethod === 'percentage'
+          ? percentageValid
+          : itemWiseValid;
+
+  const reviewShares: ExpenseShare[] =
+    splitMethod === 'equal'
+      ? equalShares
+      : splitMethod === 'unequal'
+        ? unequalShares
+        : splitMethod === 'percentage'
+          ? percentageComputed
+          : itemWiseShares;
 
   const detailsValid =
-    group !== undefined &&
+    selectedGroup !== null &&
+    detail !== null &&
     title.trim().length > 0 &&
-    amount !== null &&
+    amountPaise !== null &&
     effectivePayerId !== null;
-
-  const displayName =
-    user?.name?.split(' ')[0] ?? members.find((m) => m.isYou)?.name ?? 'Rohit';
 
   const dirty =
     title.trim().length > 0 ||
@@ -272,15 +436,14 @@ export default function AddExpense() {
   // --- Actions ---
 
   const pickGroup = (id: string) => {
-    const g = selectable.find((x) => x.id === id);
-    if (!g) return;
-    setSelectedGroup(g);
-    // Fetch members for the selected group
-    void (async () => {
-      const d = await fetchGroupDetail(g.id);
-      setDetail(d);
-    })();
+    setSelectedGroupId(id);
     setStep('details');
+  };
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
   };
 
   const scanBill = async () => {
@@ -291,7 +454,7 @@ export default function AddExpense() {
       const perm = await ImagePicker.requestCameraPermissionsAsync();
       if (!perm.granted) {
         setCamError(
-          'Camera permission was denied — you can continue without a receipt.'
+          'Camera permission was denied — you can continue without a receipt.',
         );
         return;
       }
@@ -310,91 +473,72 @@ export default function AddExpense() {
   };
 
   const submit = async () => {
-    if (submitting || !detailsValid || groupId === null) return;
-
-    // Build backend-compatible payload based on split method.
-    let split_type: 'equal' | 'custom' = 'equal';
-    let participant_ids: string[] = members.map((m) => m.id);
-    let splits: { user_id: string; share_amount: string }[] = [];
-
-    if (splitMethod === 'equal') {
-      split_type = 'equal';
-    } else if (splitMethod === 'unequal') {
-      split_type = 'custom';
-      splits = unequalRows
-        .filter((r) => r.included && r.paise !== null)
-        .map((r) => ({
-          user_id: r.member.id,
-          share_amount: formatINR(r.paise as number),
-        }));
-    } else if (splitMethod === 'percentage') {
-      split_type = 'custom';
-      // Compute monetary share from percentage.
-      const totalMembers = members.length;
-      splits = members.map((m) => {
-        const pct = percentageInputs[m.id] ?? 0;
-        if (pct <= 0) return null;
-        // Share = (pct/100) * amount, rounded to paise.
-        const sharePaise = Math.round((pct / 100) * amount!);
-        return { user_id: m.id, share_amount: formatINR(sharePaise) };
-      }).filter((s) => s !== null) as { user_id: string; share_amount: string }[];
-    } else if (splitMethod === 'item-wise') {
-      split_type = 'custom';
-      // Sum all item shares.
-      const allItemSharePaise = itemWiseItems.reduce(
-        (sum, item) => sum + parseAmountToPaise(item.amount),
-        0
-      );
-      if (allItemSharePaise === 0 || allItemSharePaise !== amount) {
-        // Fallback: distribute equally across participants.
-        split_type = 'equal';
-        splits = members.map((m) => ({
-          user_id: m.id,
-          share_amount: formatINR(amount! / members.length),
-        }));
-      } else {
-        // Build splits from item allocations (simple mapping: each participant gets their item share).
-        // For simplicity, distribute the total across participants equally.
-        split_type = 'equal';
-        splits = members.map((m) => ({
-          user_id: m.id,
-          share_amount: formatINR(amount! / members.length),
-        }));
-      }
-    }
-
-    // Validate payload
-    if (split_type === 'custom' && splits.length === 0) {
-      // Nothing to submit.
+    if (
+      submitting ||
+      created ||
+      !detailsValid ||
+      !splitValid ||
+      amountPaise === null ||
+      !selectedGroup ||
+      effectivePayerId === null
+    ) {
       return;
     }
-    if (split_type === 'equal' && members.length === 0) {
-      return;
-    }
-
     setSubmitting(true);
+    setSubmitError(null);
     try {
+      const isEqual = splitMethod === 'equal';
+      const itemSummary =
+        splitMethod === 'item-wise'
+          ? ` Items: ${items
+              .map(
+                (i) =>
+                  `${i.name.trim()} (${paiseToDecimalString(
+                    parseAmountToPaise(i.amountText) ?? 0,
+                  )})`,
+              )
+              .join(', ')
+              .slice(0, 400)}`
+          : '';
       const expense = await createExpense({
-        group_id: group.id,
+        group_id: selectedGroup.id,
         title: title.trim(),
-        amount: formatINRInput(amount!),
-        currency: 'INR',
-        payer_user_id: effectivePayerId as string,
-        split_type,
-        participant_ids: split_type === 'equal' ? members.map((m) => m.id) : members.map((m) => m.id),
-        splits,
-        description: '',
+        amount: paiseToDecimalString(amountPaise),
+        payer_user_id: effectivePayerId,
+        split_type: isEqual ? 'equal' : 'custom',
+        participant_ids: isEqual
+          ? participants.map((m) => m.id)
+          : reviewShares.map((s) => s.memberId),
+        splits: isEqual ? [] : sharesToPayload(reviewShares),
+        description: itemSummary ? itemSummary.trim() : undefined,
       });
-      setCreated({ id: String(expense.id) });
+      // Mark the queued receipt as attached (local queue only; the
+      // backend has no receipt upload, so nothing is uploaded).
+      if (typeof receiptId === 'string' && receiptId) {
+        linkReceiptToExpense(receiptId, {
+          expenseId: String(expense.id),
+          groupId: selectedGroup.id,
+          expenseName: `${title.trim()} • ${selectedGroup.name}`,
+          amountPaise,
+        });
+      }
+      setCreated({
+        id: String(expense.id),
+        title: String(expense.title),
+        groupName: selectedGroup.name,
+      });
       setStep('success');
-    } catch (e: any) {
-      // Keep submit recoverable; do not swallow error silently.
-      setSubmitting(false);
-      // We'll surface the error in the UI via the error state below.
-      throw e;
+    } catch (e) {
+      // Recoverable: stay on review with the error; nothing is faked.
+      setSubmitError(
+        e instanceof GroupsApiError
+          ? e.message
+          : e instanceof Error
+            ? e.message
+            : 'Could not add the expense. Please try again.',
+      );
     } finally {
-      // Note: we do NOT reset submitting here because the UI shows "success" state
-      // after backend success; on retry the step resets.
+      setSubmitting(false);
     }
   };
 
@@ -406,15 +550,18 @@ export default function AddExpense() {
     setSplitMethod('equal');
     setUnequalAmounts({});
     setPercentageInputs({});
-    setItemWiseItems([]);
+    setItems([]);
     setTouchedDetails(false);
+    setSubmitError(null);
     setCreated(null);
     setStep('details');
   };
 
   const goBack = () => {
-    if (step === 'details') setStep('group');
-    else if (step === 'split') setStep('details');
+    if (step === 'details') {
+      if (typeof presetGroupId === 'string' && presetGroupId) router.back();
+      else setStep('group');
+    } else if (step === 'split') setStep('details');
     else if (step === 'review') setStep('split');
     else router.back();
   };
@@ -441,7 +588,7 @@ export default function AddExpense() {
             ? 'Review'
             : 'Success';
 
-  const canContinueDetails = detailsValid;
+  const canContinueDetails = detailsValid && !detailLoading;
 
   return (
     <View style={{ flex: 1 }}>
@@ -475,9 +622,9 @@ export default function AddExpense() {
               <Text className="text-[19px] font-extrabold text-white">
                 {stepTitle}
               </Text>
-              {group && step !== 'group' && step !== 'success' && (
+              {selectedGroup && step !== 'group' && step !== 'success' && (
                 <Text className="text-[12px] text-white/65" numberOfLines={1}>
-                  {group.name} • {group.members.length} members
+                  {selectedGroup.name} • {members.length} members
                 </Text>
               )}
             </View>
@@ -502,7 +649,37 @@ export default function AddExpense() {
                 <Text className="mb-3 text-[14px] text-white/70">
                   Select the group for this expense
                 </Text>
-                {selectable.length === 0 && (
+                {groupsLoading ? (
+                  <GlassShell radius={22} blurTarget={backgroundRef}>
+                    <View className="items-center p-6">
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                      <Text className="mt-2 text-[13px] text-white/65">
+                        Loading groups…
+                      </Text>
+                    </View>
+                  </GlassShell>
+                ) : groupsError ? (
+                  <GlassShell radius={22} blurTarget={backgroundRef}>
+                    <View className="items-center p-6">
+                      <Text className="text-[14px] font-bold text-white">
+                        Could not load groups
+                      </Text>
+                      <Text className="mt-1 text-center text-[13px] text-white/65">
+                        {groupsError}
+                      </Text>
+                      <TouchableOpacity
+                        activeOpacity={0.85}
+                        onPress={() => void loadGroups()}
+                        className="mt-4 rounded-full px-5 py-2.5"
+                        style={{ backgroundColor: 'rgba(52,211,153,0.18)' }}
+                      >
+                        <Text className="text-[13px] font-bold text-white">
+                          Retry
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </GlassShell>
+                ) : groupOptions.length === 0 ? (
                   <GlassShell radius={22} blurTarget={backgroundRef}>
                     <View className="items-center p-6">
                       <Text className="text-[15px] font-bold text-white">
@@ -523,230 +700,333 @@ export default function AddExpense() {
                       </TouchableOpacity>
                     </View>
                   </GlassShell>
-                )}
-                {selectable.map((g) => (
-                  <TouchableOpacity
-                    key={g.id}
-                    activeOpacity={0.85}
-                    onPress={() => pickGroup(g.id)}
-                    className="mb-2.5"
-                  >
-                    <GlassShell radius={22} blurTarget={backgroundRef}>
-                      <View className="flex-row items-center p-4">
-                        <View
-                          className="h-12 w-12 items-center justify-center rounded-full border border-white/25"
-                          style={{ backgroundColor: 'rgba(52,211,153,0.16)' }}
-                        >
-                          <Ionicons name="people" size={22} color="#FFFFFF" />
-                        </View>
-                        <View className="ml-3 min-w-0 flex-1">
-                          <Text
-                            className="text-[16px] font-extrabold text-white"
-                            numberOfLines={1}
+                ) : (
+                  groupOptions.map((g) => (
+                    <TouchableOpacity
+                      key={g.id}
+                      activeOpacity={0.85}
+                      onPress={() => pickGroup(g.id)}
+                      className="mb-2.5"
+                    >
+                      <GlassShell radius={22} blurTarget={backgroundRef}>
+                        <View className="flex-row items-center p-4">
+                          <View
+                            className="h-12 w-12 items-center justify-center rounded-full border border-white/25"
+                            style={{ backgroundColor: 'rgba(52,211,153,0.16)' }}
                           >
-                            {g.name}
-                          </Text>
-                          <Text className="mt-0.5 text-[12px] text-white/65">
-                            {g.members.length} members • {formatINR(toPaise(g.totalExpenses))} spent
-                          </Text>
+                            <Ionicons name="people" size={22} color="#FFFFFF" />
+                          </View>
+                          <View className="ml-3 min-w-0 flex-1">
+                            <Text
+                              className="text-[16px] font-extrabold text-white"
+                              numberOfLines={1}
+                            >
+                              {g.name}
+                            </Text>
+                            <Text className="mt-0.5 text-[12px] text-white/65">
+                              {g.memberCount === 1
+                                ? '1 member'
+                                : `${g.memberCount} members`}
+                            </Text>
+                          </View>
+                          <Ionicons
+                            name="chevron-forward"
+                            size={18}
+                            color="rgba(255,255,255,0.6)"
+                          />
                         </View>
-                        <Ionicons
-                          name="chevron-forward"
-                          size={18}
-                          color="rgba(255,255,255,0.6)"
-                        />
-                      </View>
-                    </GlassShell>
-                  </TouchableOpacity>
-                ))}
+                      </GlassShell>
+                    </TouchableOpacity>
+                  ))
+                )}
               </View>
             )}
 
             {/* STEP 2 — expense details */}
-            {step === 'details' && group && (
+            {step === 'details' && selectedGroup && (
               <View>
-                <GlassShell radius={22} blurTarget={backgroundRef}>
-                  <View className="p-4">
-                    <FieldLabel text="Expense name" />
-                    <TextInput
-                      value={title}
-                      onChangeText={setTitle}
-                      placeholder="Dinner at Bruno's"
-                      placeholderTextColor="rgba(255,255,255,0.35)"
-                      className="rounded-xl border border-white/20 bg-white/10 px-3.5 py-3 text-[15px] text-white"
-                    />
-                    <InlineError
-                      text={
-                        touchedDetails && title.trim().length === 0
-                          ? 'Enter an expense name'
-                          : null
-                      }
-                    />
-
-                    <View className="mt-4">
-                      <FieldLabel text="Amount" />
-                      <View className="flex-row items-center rounded-xl border border-white/20 bg-white/10 px-3.5">
-                        <Text className="mr-1 text-[17px] font-extrabold text-white">
-                          ₹
-                        </Text>
-                        <TextInput
-                          value={amountText}
-                          onChangeText={setAmountText}
-                          placeholder="0.00"
-                          placeholderTextColor="rgba(255,255,255,0.35)"
-                          keyboardType="decimal-pad"
-                          className="flex-1 py-3 text-[17px] font-bold text-white"
-                        />
-                      </View>
-                      <InlineError
-                        text={
-                          touchedDetails && amountPaise === null
-                            ? 'Enter a valid amount'
-                            : null
-                        }
-                      />
+                {detailLoading ? (
+                  <GlassShell radius={22} blurTarget={backgroundRef}>
+                    <View className="items-center p-6">
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                      <Text className="mt-2 text-[13px] text-white/65">
+                        Loading members…
+                      </Text>
                     </View>
+                  </GlassShell>
+                ) : detailError || !detail ? (
+                  <GlassShell radius={22} blurTarget={backgroundRef}>
+                    <View className="items-center p-6">
+                      <Text className="text-[14px] font-bold text-white">
+                        Could not load group
+                      </Text>
+                      <Text className="mt-1 text-center text-[13px] text-white/65">
+                        {detailError ?? 'Group not found.'}
+                      </Text>
+                      <TouchableOpacity
+                        activeOpacity={0.85}
+                        onPress={() =>
+                          selectedGroupId && void loadDetail(selectedGroupId)
+                        }
+                        className="mt-4 rounded-full px-5 py-2.5"
+                        style={{ backgroundColor: 'rgba(52,211,153,0.18)' }}
+                      >
+                        <Text className="text-[13px] font-bold text-white">
+                          Retry
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </GlassShell>
+                ) : (
+                  <>
+                    <GlassShell radius={22} blurTarget={backgroundRef}>
+                      <View className="p-4">
+                        <FieldLabel text="Expense name" />
+                        <TextInput
+                          value={title}
+                          onChangeText={setTitle}
+                          placeholder="Dinner at Bruno's"
+                          placeholderTextColor="rgba(255,255,255,0.35)"
+                          className="rounded-xl border border-white/20 bg-white/10 px-3.5 py-3 text-[15px] text-white"
+                        />
+                        <InlineError
+                          text={
+                            touchedDetails && title.trim().length === 0
+                              ? 'Enter an expense name'
+                              : null
+                          }
+                        />
 
-                    <View className="mt-4">
-                      <FieldLabel text="Paid by" />
-                      <View className="flex-row gap-2">
-                        {members.map((m) => {
-                          const active = m.id === effectivePayerId;
-                          return (
-                            <TouchableOpacity
-                              key={m.id}
-                              activeOpacity={0.85}
-                              onPress={() => setPayerId(m.id)}
-                              className={`flex-1 items-center rounded-2xl border px-1 py-2.5 ${
-                                active
-                                  ? 'border-white/30'
-                                  : 'border-white/15'
-                              }`}
-                              style={
-                                active
-                                  ? { backgroundColor: 'rgba(52,211,153,0.16)' }
-                                  : { backgroundColor: 'rgba(255,255,255,0.05)' }
-                              }
-                            >
-                              <MemberAvatar
-                                uri={m.avatar}
-                                isYou={m.isYou}
-                                size={36}
+                        <View className="mt-4">
+                          <FieldLabel text="Amount" />
+                          <View className="flex-row items-center rounded-xl border border-white/20 bg-white/10 px-3.5">
+                            <Text className="mr-1 text-[17px] font-extrabold text-white">
+                              ₹
+                            </Text>
+                            <TextInput
+                              value={amountText}
+                              onChangeText={setAmountText}
+                              placeholder="0.00"
+                              placeholderTextColor="rgba(255,255,255,0.35)"
+                              keyboardType="decimal-pad"
+                              className="flex-1 py-3 text-[17px] font-bold text-white"
+                            />
+                          </View>
+                          <InlineError
+                            text={
+                              touchedDetails && amountPaise === null
+                                ? 'Enter a valid amount'
+                                : null
+                            }
+                          />
+                        </View>
+
+                        <View className="mt-4">
+                          <FieldLabel text="Paid by" />
+                          <View className="flex-row gap-2">
+                            {members.map((m) => {
+                              const active = m.id === effectivePayerId;
+                              return (
+                                <TouchableOpacity
+                                  key={m.id}
+                                  activeOpacity={0.85}
+                                  onPress={() => setPayerId(m.id)}
+                                  className={`flex-1 items-center rounded-2xl border px-1 py-2.5 ${
+                                    active
+                                      ? 'border-white/30'
+                                      : 'border-white/15'
+                                  }`}
+                                  style={
+                                    active
+                                      ? { backgroundColor: 'rgba(52,211,153,0.16)' }
+                                      : { backgroundColor: 'rgba(255,255,255,0.05)' }
+                                  }
+                                >
+                                  <MemberAvatar isYou={m.isYou} size={36} />
+                                  <Text
+                                    className="mt-1 text-[12px] font-bold text-white"
+                                    numberOfLines={1}
+                                  >
+                                    {m.name}
+                                    {m.isYou ? ' (You)' : ''}
+                                  </Text>
+                                </TouchableOpacity>
+                              );
+                            })}
+                          </View>
+                        </View>
+
+                        <View className="mt-4">
+                          <FieldLabel text="Receipt (optional)" />
+                          {receiptUri ? (
+                            <View className="flex-row items-center rounded-2xl border border-white/20 bg-white/10 p-2.5">
+                              <Image
+                                source={{ uri: receiptUri }}
+                                resizeMode="cover"
+                                style={{ width: 64, height: 64, borderRadius: 12 }}
                               />
-                              <Text
-                                className="mt-1 text-[12px] font-bold text-white"
-                                numberOfLines={1}
+                              <Text className="ml-3 flex-1 text-[13px] font-semibold text-white">
+                                Bill attached
+                              </Text>
+                              <TouchableOpacity
+                                activeOpacity={0.8}
+                                onPress={scanBill}
+                                className="mr-1 rounded-full border border-white/20 bg-white/10 px-3 py-1.5"
                               >
-                                {m.name}
-                                {m.isYou ? ' (You)' : ''}
-                                {m.status === 'pending' ? ' • Pending' : ''}
+                                <Text className="text-[12px] font-bold text-white">
+                                  Retake
+                                </Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                activeOpacity={0.8}
+                                onPress={() => setReceiptUri(null)}
+                                className="h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/10"
+                              >
+                                <Ionicons name="trash" size={16} color={CORAL} />
+                              </TouchableOpacity>
+                            </View>
+                          ) : (
+                            <TouchableOpacity
+                              activeOpacity={0.85}
+                              onPress={scanBill}
+                              disabled={camBusy}
+                              className="flex-row items-center justify-center rounded-2xl border border-dashed border-white/25 bg-white/10 py-3.5"
+                            >
+                              {camBusy ? (
+                                <ActivityIndicator size="small" color="#FFFFFF" />
+                              ) : (
+                                <Ionicons name="scan" size={20} color={GREEN} />
+                              )}
+                              <Text className="ml-2 text-[14px] font-bold text-white">
+                                {camBusy ? 'Opening camera…' : 'Scan Bill'}
                               </Text>
                             </TouchableOpacity>
-                          );
-                        })}
-                      </View>
-                    </View>
-
-                    <View className="mt-4">
-                      <FieldLabel text="Receipt (optional)" />
-                      {receiptUri ? (
-                        <View className="flex-row items-center rounded-2xl border border-white/20 bg-white/10 p-2.5">
-                          <Image
-                            source={{ uri: receiptUri }}
-                            resizeMode="cover"
-                            style={{ width: 64, height: 64, borderRadius: 12 }}
-                          />
-                          <Text className="ml-3 flex-1 text-[13px] font-semibold text-white">
-                            Bill attached
-                          </Text>
-                          <TouchableOpacity
-                            activeOpacity={0.8}
-                            onPress={scanBill}
-                            className="mr-1 rounded-full border border-white/20 bg-white/10 px-3 py-1.5"
-                          >
-                            <Text className="text-[12px] font-bold text-white">
-                              Retake
-                            </Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            activeOpacity={0.8}
-                            onPress={() => setReceiptUri(null)}
-                            className="h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/10"
-                          >
-                            <Ionicons name="trash" size={16} color={CORAL} />
-                          </TouchableOpacity>
-                        </View>
-                      ) : (
-                        <TouchableOpacity
-                          activeOpacity={0.85}
-                          onPress={scanBill}
-                          disabled={camBusy}
-                          className="flex-row items-center justify-center rounded-2xl border border-dashed border-white/25 bg-white/10 py-3.5"
-                        >
-                          {camBusy ? (
-                            <ActivityIndicator size="small" color="#FFFFFF" />
-                          ) : (
-                            <Ionicons name="scan" size={20} color={GREEN} />
                           )}
-                          <Text className="ml-2 text-[14px] font-bold text-white">
-                            {camBusy ? 'Opening camera…' : 'Scan Bill'}
-                          </Text>
-                        </TouchableOpacity>
-                      )}
-                      {camError && (
-                        <Text className="mt-1.5 text-[12px] text-white/70">
-                          {camError}
-                        </Text>
-                      )}
-                    </View>
-                  </View>
-                </GlassShell>
+                          {camError && (
+                            <Text className="mt-1.5 text-[12px] text-white/70">
+                              {camError}
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+                    </GlassShell>
 
-                <CTAButton
-                  label="Split Expense"
-                  disabled={!canContinueDetails}
-                  onPress={() => {
-                    setTouchedDetails(true);
-                    if (canContinueDetails) setStep('split');
-                  }}
-                />
+                    <CTAButton
+                      label="Split Expense"
+                      disabled={!canContinueDetails}
+                      onPress={() => {
+                        setTouchedDetails(true);
+                        if (canContinueDetails) setStep('split');
+                      }}
+                    />
+                  </>
+                )}
               </View>
             )}
 
             {/* STEP 3 — split method + shares */}
-            {step === 'split' && group && amount !== null && (
+            {step === 'split' && selectedGroup && amountPaise !== null && (
               <View>
                 <View className="mb-3 flex-row gap-2">
-                  {(['equal', 'unequal'] as SplitMethod[]).map((m) => {
-                    const active = splitMethod === m;
-                    return (
-                      <TouchableOpacity
-                        key={m}
-                        activeOpacity={0.9}
-                        onPress={() => setSplitMethod(m)}
-                        className="flex-1"
-                      >
-                        <View
-                          className="items-center rounded-full border py-2.5"
-                          style={{
-                            borderColor: active
-                              ? 'rgba(52,211,153,0.5)'
-                              : 'rgba(255,255,255,0.15)',
-                            backgroundColor: active
-                              ? 'rgba(52,211,153,0.16)'
-                              : 'rgba(255,255,255,0.05)',
-                          }}
+                  {(['equal', 'unequal', 'percentage', 'item-wise'] as SplitMethod[]).map(
+                    (m) => {
+                      const active = splitMethod === m;
+                      const label =
+                        m === 'equal'
+                          ? 'Equal'
+                          : m === 'unequal'
+                            ? 'Unequal'
+                            : m === 'percentage'
+                              ? '%'
+                              : 'Items';
+                      return (
+                        <TouchableOpacity
+                          key={m}
+                          activeOpacity={0.9}
+                          onPress={() => setSplitMethod(m)}
+                          className="flex-1"
                         >
-                          <Text className="text-[14px] font-bold text-white">
-                            {m === 'equal' ? 'Equal' : 'Unequal'}
-                          </Text>
-                        </View>
-                      </TouchableOpacity>
-                    );
-                  })}
+                          <View
+                            className="items-center rounded-full border py-2.5"
+                            style={{
+                              borderColor: active
+                                ? 'rgba(52,211,153,0.5)'
+                                : 'rgba(255,255,255,0.15)',
+                              backgroundColor: active
+                                ? 'rgba(52,211,153,0.16)'
+                                : 'rgba(255,255,255,0.05)',
+                            }}
+                          >
+                            <Text className="text-[13px] font-bold text-white">
+                              {label}
+                            </Text>
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    },
+                  )}
                 </View>
 
-                {splitMethod === 'equal' ? (
+                {/* Participant selection (equal / percentage). Unequal and
+                    item-wise carry their own inclusion controls below. */}
+                {splitMethod !== 'item-wise' && (
+                  <GlassShell radius={22} blurTarget={backgroundRef}>
+                    <View className="p-4">
+                      <FieldLabel text="Participants" />
+                      {members.map((m) => {
+                        const included = selectedIds.includes(m.id);
+                        return (
+                          <TouchableOpacity
+                            key={m.id}
+                            activeOpacity={0.8}
+                            onPress={() => toggleSelected(m.id)}
+                            className="flex-row items-center py-2"
+                          >
+                            <View
+                              className="h-9 w-9 items-center justify-center"
+                            >
+                              <View
+                                className="h-6 w-6 items-center justify-center rounded-full border"
+                                style={{
+                                  borderColor: included
+                                    ? GREEN
+                                    : 'rgba(255,255,255,0.3)',
+                                  backgroundColor: included
+                                    ? GREEN
+                                    : 'transparent',
+                                }}
+                              >
+                                {included && (
+                                  <Ionicons
+                                    name="checkmark"
+                                    size={15}
+                                    color="#052e22"
+                                  />
+                                )}
+                              </View>
+                            </View>
+                            <MemberAvatar isYou={m.isYou} size={32} />
+                            <Text
+                              className="ml-2 flex-1 text-[14px] font-bold text-white"
+                              numberOfLines={1}
+                              style={{ opacity: included ? 1 : 0.45 }}
+                            >
+                              {m.name}
+                              {m.isYou ? ' (You)' : ''}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                      {participants.length === 0 && (
+                        <Text className="mt-1 text-[12px] font-semibold" style={{ color: CORAL }}>
+                          Select at least one participant
+                        </Text>
+                      )}
+                    </View>
+                  </GlassShell>
+                )}
+
+                {splitMethod === 'equal' && (
                   <GlassShell radius={22} blurTarget={backgroundRef}>
                     <View className="p-4">
                       <View className="mb-3 items-center">
@@ -754,47 +1034,45 @@ export default function AddExpense() {
                           Equal Split
                         </Text>
                         <Text className="mt-0.5 text-[22px] font-extrabold text-white">
-                          {formatINR(equalShares[0] ?? 0)}{' '}
+                          {equalShares.length > 0
+                            ? formatINR(equalShares[0].amountPaise)
+                            : formatINR(0)}{' '}
                           <Text className="text-[14px] font-semibold text-white/65">
                             per person
                           </Text>
                         </Text>
                       </View>
-                      {members.map((m) => {
-                        const share = equalShares.find(
-                          (s) => s.memberId === m.id
-                        );
+                      {equalShares.map((s) => {
+                        const m = members.find((x) => x.id === s.memberId);
+                        if (!m) return null;
                         return (
                           <View
-                            key={m.id}
-                            className="flex-row items-center border-white/10 py-2.5"
+                            key={s.memberId}
+                            className="flex-row items-center py-2.5"
                             style={{
                               borderBottomWidth: 1,
                               borderBottomColor: 'rgba(255,255,255,0.08)',
                             }}
                           >
-                            <MemberAvatar
-                              uri={m.avatar}
-                              isYou={m.isYou}
-                              size={36}
-                            />
+                            <MemberAvatar isYou={m.isYou} size={36} />
                             <Text
                               className="ml-2.5 flex-1 text-[14px] font-bold text-white"
                               numberOfLines={1}
                             >
                               {m.name}
                               {m.isYou ? ' (You)' : ''}
-                              {m.status === 'pending' ? ' • Pending' : ''}
                             </Text>
                             <Text className="text-[15px] font-extrabold text-white">
-                              {formatINR(share ?? 0)}
+                              {formatINR(s.amountPaise)}
                             </Text>
                           </View>
                         );
                       })}
                     </View>
                   </GlassShell>
-                ) : (
+                )}
+
+                {splitMethod === 'unequal' && (
                   <GlassShell radius={22} blurTarget={backgroundRef}>
                     <View className="p-4">
                       <View
@@ -807,7 +1085,7 @@ export default function AddExpense() {
                         }}
                       >
                         <Text className="text-[13px] font-bold text-white">
-                          Total {formatINR(amount)}
+                          Total {formatINR(amountPaise)}
                         </Text>
                         <Text
                           className="text-[13px] font-extrabold"
@@ -823,65 +1101,88 @@ export default function AddExpense() {
                               : `${formatINR(-(unequalRemaining ?? 0))} over`}
                         </Text>
                       </View>
-                      {unequalRows.map(({ member: m, included, paise }) => (
-                        <View
-                          key={m.id}
-                          className="flex-row items-center py-2"
-                        >
-                          <TouchableOpacity
-                            activeOpacity={0.8}
-                            onPress={() =>
-                              setUnequalIncluded((prev) =>
-                                prev.includes(m.id)
-                                  ? prev.filter((id) => id !== m.id)
-                                  : [...prev, m.id]
-                              )
-                            }
-                            className="h-9 w-9 items-center justify-center"
-                          >
-                            <View
-                              className="h-6 w-6 items-center justify-center rounded-full border"
-                              style={{
-                                borderColor: included
-                                  ? GREEN
-                                  : 'rgba(255,255,255,0.3)',
-                                backgroundColor: included
-                                  ? GREEN
-                                  : 'transparent',
-                              }}
-                            >
-                              {included && (
-                                <Ionicons
-                                  name="checkmark"
-                                  size={15}
-                                  color="#052e22"
-                                />
-                              )}
-                            </View>
-                          </TouchableOpacity>
-                          <MemberAvatar
-                            uri={m.avatar}
-                            isYou={m.isYou}
-                            size={36}
-                          />
+                      {participants.map((m) => (
+                        <View key={m.id} className="flex-row items-center py-2">
+                          <MemberAvatar isYou={m.isYou} size={36} />
                           <Text
                             className="ml-2 flex-1 text-[14px] font-bold text-white"
                             numberOfLines={1}
-                            style={{ opacity: included ? 1 : 0.45 }}
                           >
                             {m.name}
                             {m.isYou ? ' (You)' : ''}
-                            {m.status === 'pending' ? ' • Pending' : ''}
                           </Text>
-                          {included ? (
-                            <View className="ml-2 w-[110px] flex-row items-center rounded-xl border border-white/20 bg-white/10 px-2.5">
-                              <Text className="mr-0.5 text-[14px] font-bold text-white">
-                                ₹
-                              </Text>
+                          <View className="ml-2 w-[110px] flex-row items-center rounded-xl border border-white/20 bg-white/10 px-2.5">
+                            <Text className="mr-0.5 text-[14px] font-bold text-white">
+                              ₹
+                            </Text>
+                            <TextInput
+                              value={unequalAmounts[m.id] ?? ''}
+                              onChangeText={(v) =>
+                                setUnequalAmounts((prev) => ({
+                                  ...prev,
+                                  [m.id]: v,
+                                }))
+                              }
+                              placeholder="0"
+                              placeholderTextColor="rgba(255,255,255,0.35)"
+                              keyboardType="decimal-pad"
+                              className="flex-1 py-2 text-[14px] font-bold text-white"
+                            />
+                          </View>
+                        </View>
+                      ))}
+                      {unequalInvalid && (
+                        <Text className="mt-1 text-[12px] font-semibold" style={{ color: CORAL }}>
+                          Enter a valid amount for each participant
+                        </Text>
+                      )}
+                    </View>
+                  </GlassShell>
+                )}
+
+                {splitMethod === 'percentage' && (
+                  <GlassShell radius={22} blurTarget={backgroundRef}>
+                    <View className="p-4">
+                      <View
+                        className="mb-3 flex-row items-center justify-between rounded-xl px-3 py-2.5"
+                        style={{
+                          backgroundColor: percentageValid
+                            ? 'rgba(52,211,153,0.14)'
+                            : 'rgba(251,113,133,0.12)',
+                        }}
+                      >
+                        <Text className="text-[13px] font-bold text-white">
+                          Total {formatINR(amountPaise)}
+                        </Text>
+                        <Text
+                          className="text-[13px] font-extrabold"
+                          style={{ color: percentageValid ? GREEN : CORAL }}
+                        >
+                          {percentageValid
+                            ? '100% ✓'
+                            : `${Number.isFinite(percentageTotal) ? percentageTotal.toFixed(1) : '—'}% / 100%`}
+                        </Text>
+                      </View>
+                      {participants.map((m) => {
+                        const share = percentageComputed.find(
+                          (s) => s.memberId === m.id,
+                        );
+                        return (
+                          <View key={m.id} className="flex-row items-center py-2">
+                            <MemberAvatar isYou={m.isYou} size={36} />
+                            <Text
+                              className="ml-2 flex-1 text-[14px] font-bold text-white"
+                              numberOfLines={1}
+                            >
+                              {m.name}
+                              {m.isYou ? ' (You)' : ''}
+                              {share ? ` • ${formatINR(share.amountPaise)}` : ''}
+                            </Text>
+                            <View className="ml-2 w-[90px] flex-row items-center rounded-xl border border-white/20 bg-white/10 px-2.5">
                               <TextInput
-                                value={unequalAmounts[m.id] ?? ''}
+                                value={percentageInputs[m.id] ?? ''}
                                 onChangeText={(v) =>
-                                  setUnequalAmounts((prev) => ({
+                                  setPercentageInputs((prev) => ({
                                     ...prev,
                                     [m.id]: v,
                                   }))
@@ -891,22 +1192,164 @@ export default function AddExpense() {
                                 keyboardType="decimal-pad"
                                 className="flex-1 py-2 text-[14px] font-bold text-white"
                               />
+                              <Text className="text-[14px] font-bold text-white/70">
+                                %
+                              </Text>
                             </View>
-                          ) : (
-                            <Text className="ml-2 w-[110px] text-right text-[13px] text-white/35">
-                              --
-                            </Text>
-                          )}
-                        </View>
-                      ))}
-                      {unequalInvalidRows > 0 && (
+                          </View>
+                        );
+                      })}
+                      {!percentageNumbersValid && (
                         <Text className="mt-1 text-[12px] font-semibold" style={{ color: CORAL }}>
-                          Enter a valid amount for each selected member
+                          Enter a valid percentage (0–100) for each participant
                         </Text>
                       )}
-                      {unequalRows.filter((r) => r.included).length === 0 && (
-                        <Text className="mt-1 text-[12px] font-semibold" style={{ color: CORAL }}>
-                          Select at least one member
+                    </View>
+                  </GlassShell>
+                )}
+
+                {splitMethod === 'item-wise' && (
+                  <GlassShell radius={22} blurTarget={backgroundRef}>
+                    <View className="p-4">
+                      <View
+                        className="mb-3 flex-row items-center justify-between rounded-xl px-3 py-2.5"
+                        style={{
+                          backgroundColor: itemWiseValid
+                            ? 'rgba(52,211,153,0.14)'
+                            : 'rgba(251,113,133,0.12)',
+                        }}
+                      >
+                        <Text className="text-[13px] font-bold text-white">
+                          Items {formatINR(itemWiseTotal)} / {formatINR(amountPaise)}
+                        </Text>
+                        <Text
+                          className="text-[13px] font-extrabold"
+                          style={{ color: itemWiseValid ? GREEN : CORAL }}
+                        >
+                          {itemWiseValid ? 'Exact ✓' : 'Must match'}
+                        </Text>
+                      </View>
+                      {items.map((item, idx) => (
+                        <View
+                          key={item.id}
+                          className="mb-3 rounded-2xl border border-white/15 bg-white/5 p-3"
+                        >
+                          <View className="flex-row items-center gap-2">
+                            <TextInput
+                              value={item.name}
+                              onChangeText={(v) =>
+                                setItems((prev) =>
+                                  prev.map((it) =>
+                                    it.id === item.id ? { ...it, name: v } : it,
+                                  ),
+                                )
+                              }
+                              placeholder={`Item ${idx + 1} name`}
+                              placeholderTextColor="rgba(255,255,255,0.35)"
+                              className="flex-1 rounded-xl border border-white/20 bg-white/10 px-3 py-2.5 text-[14px] font-bold text-white"
+                            />
+                            <View className="w-[100px] flex-row items-center rounded-xl border border-white/20 bg-white/10 px-2.5">
+                              <Text className="mr-0.5 text-[14px] font-bold text-white">
+                                ₹
+                              </Text>
+                              <TextInput
+                                value={item.amountText}
+                                onChangeText={(v) =>
+                                  setItems((prev) =>
+                                    prev.map((it) =>
+                                      it.id === item.id
+                                        ? { ...it, amountText: v }
+                                        : it,
+                                    ),
+                                  )
+                                }
+                                placeholder="0"
+                                placeholderTextColor="rgba(255,255,255,0.35)"
+                                keyboardType="decimal-pad"
+                                className="flex-1 py-2.5 text-[14px] font-bold text-white"
+                              />
+                            </View>
+                            <TouchableOpacity
+                              activeOpacity={0.8}
+                              onPress={() =>
+                                setItems((prev) =>
+                                  prev.filter((it) => it.id !== item.id),
+                                )
+                              }
+                              className="h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/10"
+                            >
+                              <Ionicons name="trash" size={15} color={CORAL} />
+                            </TouchableOpacity>
+                          </View>
+                          <Text className="mb-1.5 mt-2.5 text-[12px] font-bold text-white/70">
+                            Shared by
+                          </Text>
+                          <View className="flex-row flex-wrap gap-1.5">
+                            {members.map((m) => {
+                              const on = item.participantIds.includes(m.id);
+                              return (
+                                <TouchableOpacity
+                                  key={m.id}
+                                  activeOpacity={0.85}
+                                  onPress={() =>
+                                    setItems((prev) =>
+                                      prev.map((it) =>
+                                        it.id === item.id
+                                          ? {
+                                              ...it,
+                                              participantIds: on
+                                                ? it.participantIds.filter(
+                                                    (x) => x !== m.id,
+                                                  )
+                                                : [...it.participantIds, m.id],
+                                            }
+                                          : it,
+                                      ),
+                                    )
+                                  }
+                                  className="rounded-full border px-3 py-1.5"
+                                  style={{
+                                    borderColor: on
+                                      ? GREEN
+                                      : 'rgba(255,255,255,0.25)',
+                                    backgroundColor: on
+                                      ? 'rgba(52,211,153,0.18)'
+                                      : 'transparent',
+                                  }}
+                                >
+                                  <Text className="text-[12px] font-bold text-white">
+                                    {m.name}
+                                    {m.isYou ? ' (You)' : ''}
+                                  </Text>
+                                </TouchableOpacity>
+                              );
+                            })}
+                          </View>
+                        </View>
+                      ))}
+                      <TouchableOpacity
+                        activeOpacity={0.85}
+                        onPress={() =>
+                          setItems((prev) => [
+                            ...prev,
+                            {
+                              id: `item${Date.now()}${prev.length}`,
+                              name: '',
+                              amountText: '',
+                              participantIds: members.map((m) => m.id),
+                            },
+                          ])
+                        }
+                        className="flex-row items-center justify-center rounded-2xl border border-dashed border-white/25 bg-white/10 py-3"
+                      >
+                        <Ionicons name="add" size={18} color={GREEN} />
+                        <Text className="ml-1.5 text-[14px] font-bold text-white">
+                          Add Item
+                        </Text>
+                      </TouchableOpacity>
+                      {items.length === 0 && (
+                        <Text className="mt-2 text-[12px] font-semibold" style={{ color: CORAL }}>
+                          Add at least one item
                         </Text>
                       )}
                     </View>
@@ -915,50 +1358,41 @@ export default function AddExpense() {
 
                 <CTAButton
                   label="Review"
-                  disabled={splitMethod === 'unequal' && !unequalValid}
+                  disabled={!splitValid}
                   onPress={() => setStep('review')}
                 />
               </View>
             )}
 
             {/* STEP 4 — review */}
-            {step === 'review' && group && amount !== null && (
+            {step === 'review' && selectedGroup && amountPaise !== null && (
               <View>
                 <GlassShell radius={22} blurTarget={backgroundRef}>
                   <View className="p-4">
                     <ReviewRow label="Expense" value={title.trim()} />
-                    <ReviewRow label="Amount" value={formatINR(amount)} bold />
+                    <ReviewRow label="Amount" value={formatINR(amountPaise)} bold />
                     <ReviewRow
                       label="Paid by"
                       value={`${payer?.name ?? ''}${payer?.isYou ? ' (You)' : ''}`}
                     />
-                    <ReviewRow label="Group" value={group.name} />
+                    <ReviewRow label="Group" value={selectedGroup.name} />
                     <ReviewRow
                       label="Split"
-                      value={splitMethod === 'equal' ? 'Equal' : splitMethod === 'unequal' ? 'Unequal' : splitMethod === 'percentage' ? 'Percentage' : 'Item-wise'}
+                      value={
+                        splitMethod === 'equal'
+                          ? 'Equal'
+                          : splitMethod === 'unequal'
+                            ? 'Unequal'
+                            : splitMethod === 'percentage'
+                              ? 'Percentage'
+                              : 'Item-wise'
+                      }
                     />
                     <View className="mt-3">
                       <Text className="mb-1.5 text-[13px] font-bold text-white/80">
                         Participants
                       </Text>
-{(splitMethod === 'equal'
-                        ? equalShares
-                        : splitMethod === 'unequal'
-                          ? unequalRows.filter((r) => r.included && r.paise !== null).map((r) => ({
-                              memberId: r.member.id,
-                              amount: formatINR(r.paise as number),
-                            }))
-                          : splitMethod === 'percentage'
-                            ? members.map((m) => ({
-                                memberId: m.id,
-                                amount: formatINR(Math.round((percentageInputs[m.id] ?? 0) / 100 * amount!)),
-                              }))
-                            : itemWiseItems.length > 0
-                              ? itemWiseItems.map((item) => ({
-                                  memberId: item.participantIds[0] || '',
-                                  amount: formatINR(parseAmountToPaise(item.amount)),
-                                }))
-                              : []}).map((s) => {
+                      {reviewShares.map((s) => {
                         const m = members.find((x) => x.id === s.memberId);
                         if (!m) return null;
                         return (
@@ -966,11 +1400,7 @@ export default function AddExpense() {
                             key={s.memberId}
                             className="flex-row items-center py-1.5"
                           >
-                            <MemberAvatar
-                              uri={m.avatar}
-                              isYou={m.isYou}
-                              size={30}
-                            />
+                            <MemberAvatar isYou={m.isYou} size={30} />
                             <Text
                               className="ml-2 flex-1 text-[13px] font-semibold text-white"
                               numberOfLines={1}
@@ -979,12 +1409,35 @@ export default function AddExpense() {
                               {m.isYou ? ' (You)' : ''}
                             </Text>
                             <Text className="text-[14px] font-extrabold text-white">
-                              {formatINR(s.amount)}
+                              {formatINR(s.amountPaise)}
                             </Text>
                           </View>
                         );
                       })}
                     </View>
+                    {splitMethod === 'item-wise' && items.length > 0 && (
+                      <View className="mt-3">
+                        <Text className="mb-1.5 text-[13px] font-bold text-white/80">
+                          Items
+                        </Text>
+                        {itemStates.map(({ item, paise }) => (
+                          <View
+                            key={item.id}
+                            className="flex-row items-center justify-between py-1"
+                          >
+                            <Text
+                              className="flex-1 text-[13px] text-white/75"
+                              numberOfLines={1}
+                            >
+                              {item.name.trim()} • {item.participantIds.length} sharing
+                            </Text>
+                            <Text className="text-[13px] font-bold text-white">
+                              {paise === null ? '—' : formatINR(paise)}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
                     {receiptUri && (
                       <View className="mt-3 flex-row items-center rounded-2xl border border-white/15 bg-white/10 p-2.5">
                         <Image
@@ -1005,17 +1458,25 @@ export default function AddExpense() {
                   </View>
                 </GlassShell>
 
+                {submitError ? (
+                  <View className="mt-3 rounded-2xl border border-red-300/40 bg-red-500/10 px-4 py-3">
+                    <Text className="text-center text-[13px] font-semibold text-red-200">
+                      {submitError}
+                    </Text>
+                  </View>
+                ) : null}
+
                 <CTAButton
                   label={submitting ? 'Adding…' : 'Add Expense'}
-                  disabled={submitting}
+                  disabled={submitting || !splitValid}
                   loading={submitting}
-                  onPress={submit}
+                  onPress={() => void submit()}
                 />
               </View>
             )}
 
             {/* STEP 5 — success */}
-            {step === 'success' && created && group && (
+            {step === 'success' && created && selectedGroup && (
               <View className="items-center pt-6">
                 <View
                   className="h-20 w-20 items-center justify-center rounded-full"
@@ -1034,20 +1495,26 @@ export default function AddExpense() {
                   Expense Added!
                 </Text>
                 <Text className="mt-1.5 px-6 text-center text-[14px] text-white/75">
-                  “{created.title}” has been added to {group.name}.
+                  “{created.title}” has been added to {created.groupName}.
                 </Text>
                 <GlassShell radius={22} blurTarget={backgroundRef}>
                   <View className="mt-5 w-full flex-row items-center p-4">
                     <Text className="flex-1 text-[14px] font-bold text-white">
-                      {formatINR(amount ?? 0)} •{' '}
-                      {splitMethod === 'equal' ? 'Equal split' : splitMethod === 'unequal' ? 'Unequal split' : splitMethod === 'percentage' ? 'Percentage split' : 'Item-wise split'}
+                      {amountPaise !== null ? formatINR(amountPaise) : ''} •{' '}
+                      {splitMethod === 'equal'
+                        ? 'Equal split'
+                        : splitMethod === 'unequal'
+                          ? 'Unequal split'
+                          : splitMethod === 'percentage'
+                            ? 'Percentage split'
+                            : 'Item-wise split'}
                     </Text>
                   </View>
                 </GlassShell>
                 <TouchableOpacity
                   activeOpacity={0.9}
                   onPress={() =>
-                    router.replace(`/(tabs)/groups/${group.id}` as any)
+                    router.replace(`/(tabs)/groups/${selectedGroup.id}` as any)
                   }
                   className="mt-5 w-full"
                 >

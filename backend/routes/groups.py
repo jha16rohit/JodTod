@@ -29,6 +29,8 @@ from backend.schemas.groups import (
     LeaveGroupResponse,
     SuggestionListResponse,
     SuggestionResponse,
+    UpdateGroupRequest,
+    UpdateGroupResponse,
 )
 from backend.services.balance_service import (
     ZERO,
@@ -208,7 +210,7 @@ async def get_group(
             user_id=entry["user"].id,
             display_name=SettlementService.display_name(entry["user"]),
             avatar_url=entry["user"].avatar_url,
-            role="member",
+            role=str(entry.get("role") or "member"),
             net_balance=entry["net_balance"],
         )
         for entry in detail["balances"]
@@ -228,6 +230,50 @@ async def get_group(
         confirmed_count=detail["confirmed_count"],
         invite_code=group.invite_code,
         members=members,
+    )
+
+
+@router.patch("/{group_id}", response_model=UpdateGroupResponse)
+async def update_group(
+    group_id: UUID,
+    payload: UpdateGroupRequest,
+    identity: Annotated[User, Depends(get_current_user)],
+    db: AsyncSession = Depends(get_db, use_cache=False),
+) -> UpdateGroupResponse:
+    """Update a group's name/description/type/photo (admins only)."""
+    try:
+        group = await GroupService.update_group(
+            db,
+            identity.id,
+            group_id,
+            name=payload.name,
+            description=payload.description,
+            group_type=payload.group_type,
+            image_url=payload.image_url,
+            clear_description=payload.clear_description,
+            clear_image_url=payload.clear_image_url,
+        )
+    except GroupNotFoundError as exc:
+        raise _not_found(exc) from exc
+    except GroupPermissionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+    except GroupValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    return UpdateGroupResponse(
+        id=group.id,
+        name=group.name,
+        description=group.description,
+        group_type=group.group_type.value,
+        currency=group.currency,
+        image_url=group.image_url,
+        lifecycle=group.lifecycle.value,
+        invite_code=group.invite_code,
     )
 
 

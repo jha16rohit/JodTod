@@ -24,6 +24,12 @@
           "microphonePermission": false
         }
       ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "JodTod needs access to your camera so you can scan group invite codes."
+        }
+      ],
       "expo-router",
       "expo-asset",
       "expo-secure-store",

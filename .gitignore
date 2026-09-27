@@ -1,0 +1,17 @@
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+# Root-level ignores (app/ and backend/ have their own .gitignore files).
+
+# Knowledge-graph build output (regenerable via Graphify; never commit).
+graphify-out/
+
+# Local environment / secrets (backend/.env is also covered by backend/.gitignore).
+.env
+.env.local
+
+# OS / editor noise.
+.DS_Store
+Thumbs.db
+
+# Python / TypeScript build caches at root level.
+__pycache__/
+*.tsbuildinfo

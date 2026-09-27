@@ -8,12 +8,50 @@
  * emails stay private).
  */
 
-import type { Expense, Group, Member } from '@/lib/mockGroups';
 import type {
   Expense as ApiExpense,
   GroupDetail,
 } from '@/services/groups.api';
 import { resolvePhotoUrl } from '@/services/profile.api';
+
+/**
+ * Display shapes for the groups UI. Mapped exclusively from live
+ * backend payloads (see membersOf/expensesOf below) — never mock data.
+ */
+export type Member = {
+  id: string;
+  name: string;
+  email: string;
+  role: 'Admin' | 'Co-Admin' | 'Member';
+  isYou?: boolean;
+  avatar: string;
+};
+
+export type Expense = {
+  id: string;
+  title: string;
+  amount: number;
+  date: string;
+  paidBy: string;
+  splitCount: number;
+  icon: 'restaurant' | 'flash' | 'film' | 'bed' | 'car' | 'receipt';
+};
+
+export type Group = {
+  id: string;
+  name: string;
+  status: 'Active' | 'Completed' | 'Archived';
+  dateRange: string;
+  destination: string;
+  description: string;
+  coverImage: string;
+  budget?: number;
+  totalExpenses: number;
+  youAreOwed: number;
+  youOwe: number;
+  members: Member[];
+  expenses: Expense[];
+};
 
 export function avatarOrEmpty(url: string | null | undefined): string {
   if (!url) return '';

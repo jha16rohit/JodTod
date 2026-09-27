@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -207,6 +207,24 @@ function formatDateTime(iso: string): string {
   return `${formatDate(date)} • ${formatTime(date)}`;
 }
 
+/**
+ * Backend notification metadata arrives as an untyped record
+ * (Record<string, unknown> | null). Coerce every present value to a
+ * display string once, so detail rows always receive real strings
+ * (never objects or undefined).
+ */
+function metaStrings(
+  metadata: Record<string, unknown> | null | undefined,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!metadata || typeof metadata !== 'object') return out;
+  for (const [key, value] of Object.entries(metadata)) {
+    if (typeof value === 'string') out[key] = value;
+    else if (value != null) out[key] = String(value);
+  }
+  return out;
+}
+
 /* ────────────────────────────────────────────────────────────────────────
    DETAIL CONTENT RENDERERS
    ──────────────────────────────────────────────────────────────────────── */
@@ -247,7 +265,7 @@ function InfoRow({
 }
 
 function ExpenseDetailContent({ notification }: { notification: BackendNotification }) {
-  const metadata = notification.metadata || {};
+  const metadata = metaStrings(notification.metadata);
   
   return (
     <>
@@ -342,7 +360,7 @@ function ExpenseDetailContent({ notification }: { notification: BackendNotificat
 }
 
 function SettlementDetailContent({ notification }: { notification: BackendNotification }) {
-  const metadata = notification.metadata || {};
+  const metadata = metaStrings(notification.metadata);
   
   return (
     <>
@@ -400,7 +418,7 @@ function SettlementDetailContent({ notification }: { notification: BackendNotifi
 }
 
 function GroupInvitationDetailContent({ notification }: { notification: BackendNotification }) {
-  const metadata = notification.metadata || {};
+  const metadata = metaStrings(notification.metadata);
   
   return (
     <>
@@ -449,7 +467,7 @@ function GroupInvitationDetailContent({ notification }: { notification: BackendN
 }
 
 function GroupCommentDetailContent({ notification }: { notification: BackendNotification }) {
-  const metadata = notification.metadata || {};
+  const metadata = metaStrings(notification.metadata);
   
   return (
     <>
@@ -499,7 +517,7 @@ function GroupCommentDetailContent({ notification }: { notification: BackendNoti
 }
 
 function TripReportDetailContent({ notification }: { notification: BackendNotification }) {
-  const metadata = notification.metadata || {};
+  const metadata = metaStrings(notification.metadata);
   
   return (
     <>
@@ -537,7 +555,7 @@ function TripReportDetailContent({ notification }: { notification: BackendNotifi
 }
 
 function BudgetAlertDetailContent({ notification }: { notification: BackendNotification }) {
-  const metadata = notification.metadata || {};
+  const metadata = metaStrings(notification.metadata);
   
   return (
     <>
@@ -596,7 +614,7 @@ function BudgetAlertDetailContent({ notification }: { notification: BackendNotif
 }
 
 function MemberJoinedDetailContent({ notification }: { notification: BackendNotification }) {
-  const metadata = notification.metadata || {};
+  const metadata = metaStrings(notification.metadata);
   
   return (
     <>
@@ -646,7 +664,7 @@ function MemberJoinedDetailContent({ notification }: { notification: BackendNoti
 }
 
 function BillImageDetailContent({ notification }: { notification: BackendNotification }) {
-  const metadata = notification.metadata || {};
+  const metadata = metaStrings(notification.metadata);
   
   return (
     <>
@@ -689,7 +707,7 @@ function BillImageDetailContent({ notification }: { notification: BackendNotific
 }
 
 function GroupSettingsDetailContent({ notification }: { notification: BackendNotification }) {
-  const metadata = notification.metadata || {};
+  const metadata = metaStrings(notification.metadata);
   
   return (
     <>
@@ -730,7 +748,7 @@ function GroupSettingsDetailContent({ notification }: { notification: BackendNot
 }
 
 function SystemDetailContent({ notification }: { notification: BackendNotification }) {
-  const metadata = notification.metadata || {};
+  const metadata = metaStrings(notification.metadata);
   
   return (
     <>

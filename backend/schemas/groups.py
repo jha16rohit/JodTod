@@ -27,6 +27,26 @@ class AddMemberRequest(BaseModel):
     user_id: UUID
 
 
+class UpdateGroupRequest(BaseModel):
+    name: Optional[str] = Field(default=None, max_length=120)
+    description: Optional[str] = Field(default=None, max_length=500)
+    group_type: Optional[str] = None
+    image_url: Optional[str] = Field(default=None, max_length=500)
+    clear_description: bool = False
+    clear_image_url: bool = False
+
+
+class UpdateGroupResponse(BaseModel):
+    id: UUID
+    name: str
+    description: Optional[str] = None
+    group_type: str
+    currency: str
+    image_url: Optional[str] = None
+    lifecycle: str
+    invite_code: Optional[str] = None
+
+
 class JoinGroupRequest(BaseModel):
     invite_code: str = Field(min_length=1, max_length=32)
 

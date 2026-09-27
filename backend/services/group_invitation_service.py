@@ -20,6 +20,11 @@ from backend.database import transaction
 from backend.models.group import GroupMember
 from backend.models.group_invitation import GroupInvitation
 from backend.models.user import User
+from backend.services.activity_events import (
+    display_name_of,
+    emit_member_joined,
+)
+from backend.services.group_service import GroupService
 from backend.services.notification_service import NotificationService
 
 
@@ -133,6 +138,16 @@ class GroupInvitationService:
                 )
             )
             await db.flush()
+        new_member = await db.get(User, user_id)
+        await emit_member_joined(
+            db,
+            member_ids=sorted(
+                await GroupService.member_user_ids(db, group.id),
+                key=str,
+            ),
+            group_name=group.name,
+            new_member_name=display_name_of(new_member, "A new member"),
+        )
 
     @staticmethod
     async def decline(

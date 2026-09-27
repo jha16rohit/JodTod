@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
-import { parseJoinToken } from '../lib/mockGroups';
+import { extractInviteCode } from '@/services/groups.api';
 
 export default function ScanJoinQR() {
   const router = useRouter();
@@ -15,12 +15,14 @@ export default function ScanJoinQR() {
   const handleScan = ({ data }: { data: string }) => {
     if (scannedRef.current) return;
     scannedRef.current = true;
-    const token = parseJoinToken(data);
-    if (!token) {
+    // The QR payload is never trusted for group info — only the invite
+    // code is extracted; join-group validates it with the backend.
+    const code = extractInviteCode(data);
+    if (!code) {
       setInvalidMsg('This QR code is not a valid JodTod group invitation.');
       return;
     }
-    router.replace(`/join-group?token=${encodeURIComponent(token)}` as any);
+    router.replace(`/join-group?code=${encodeURIComponent(code)}` as any);
   };
 
   const retry = () => {
