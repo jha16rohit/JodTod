@@ -59,6 +59,11 @@ export default function RootLayout() {
         <Stack.Screen name="onboarding" />
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="add-expense" />
+        <Stack.Screen name="add-receipt" />
+        <Stack.Screen name="add-member" />
+        <Stack.Screen name="join-group" />
+        <Stack.Screen name="scan-join-qr" />
       </Stack>
       <OfflineIndicator />
     </AuthProvider>

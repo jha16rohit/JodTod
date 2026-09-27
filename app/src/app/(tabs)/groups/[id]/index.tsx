@@ -111,6 +111,7 @@ export default function GroupDetails() {
               <View style={{ paddingHorizontal: 16 }}>
                 <ActionRow icon="receipt-outline" label="Expenses" onPress={() => router.push(`${base}/expenses` as any)} />
                 <ActionRow icon="people-outline" label="Members" onPress={() => router.push(`${base}/members` as any)} />
+                <ActionRow icon="person-add-outline" label="Invite Members" onPress={() => router.push(`${base}/invite` as any)} />
                 <ActionRow icon="pie-chart-outline" label="Budget" onPress={() => router.push(`${base}/edit` as any)} />
                 <ActionRow icon="bar-chart-outline" label="Reports" onPress={() => router.push(`${base}/expenses` as any)} />
                 <View className="border-b-0">

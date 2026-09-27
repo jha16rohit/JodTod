@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { View, Text, TouchableOpacity, Share, Platform, ToastAndroid, Alert } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
+import QRCode from 'react-native-qrcode-svg';
 
 import {
   BubbleBackdrop,
@@ -12,19 +13,51 @@ import {
   colors,
 } from '@/components/groups/ui';
 import { InviteAppIcon } from '@/components/groups/InviteAppIcon';
-import { getGroup } from '@/lib/mockGroups';
+import {
+  addMemberToGroup,
+  buildJoinLink,
+  getPeople,
+  memberStatus,
+  regenerateGroupJoinToken,
+  useGroups,
+} from '@/lib/mockGroups';
 
 type Tab = 'link' | 'qr';
 
 export default function InviteMembers() {
+  const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const group = getGroup(id as string);
+  const allGroups = useGroups();
+  const group = allGroups.find((g) => g.id === (id as string));
   const [tab, setTab] = useState<Tab>('link');
   const [copied, setCopied] = useState(false);
+  const [showExisting, setShowExisting] = useState(false);
+  const [memberNotice, setMemberNotice] = useState<string | null>(null);
 
   if (!group) return null;
 
-  const inviteLink = `https://jodtod.app/join/${group.id}`;
+  // Opaque join token link — never exposes the internal group id.
+  const inviteLink = buildJoinLink(group.id);
+
+  const candidates = getPeople().filter((p) => {
+    const email = (p.email ?? '').trim().toLowerCase();
+    return !group.members.some(
+      (m) =>
+        m.personId === p.id ||
+        (email && m.email && m.email.trim().toLowerCase() === email) ||
+        m.name.trim().toLowerCase() === p.name.trim().toLowerCase()
+    );
+  });
+
+  const addExisting = (personId: string) => {
+    const res = addMemberToGroup(group.id, personId, 'Rohit');
+    const person = getPeople().find((p) => p.id === personId);
+    setMemberNotice(
+      res.isNew
+        ? `${person?.name ?? 'Member'} added (${memberStatus(res.member)})`
+        : `${person?.name ?? 'Member'} is already in ${group.name}`
+    );
+  };
 
   const copyLink = async () => {
     await Clipboard.setStringAsync(inviteLink);
@@ -110,12 +143,17 @@ export default function InviteMembers() {
                   Ask friends to scan this QR code with their camera.
                 </Text>
 
-                {/* Placeholder QR block — swap for a real QR (e.g. react-native-qrcode-svg) */}
+                {/* Real QR encoding the opaque join link (token only) */}
                 <View
-                  className="items-center justify-center rounded-2xl mb-5"
-                  style={{ width: 180, height: 180, backgroundColor: colors.neutralBg }}
+                  className="items-center justify-center rounded-2xl mb-5 bg-white p-3"
+                  style={{ width: 204, height: 204 }}
                 >
-                  <Ionicons name="qr-code" size={110} color={colors.textDark} />
+                  <QRCode
+                    value={inviteLink}
+                    size={180}
+                    backgroundColor="#FFFFFF"
+                    color="#0B3D62"
+                  />
                 </View>
 
                 <View style={{ width: '100%' }}>
@@ -139,10 +177,78 @@ export default function InviteMembers() {
           <InviteAppIcon icon="ellipsis-horizontal" label="More" color={colors.textMuted} onPress={shareLink} />
         </View>
 
+        {memberNotice && (
+          <Text className="text-[12.5px] text-center mt-6 font-bold" style={{ color: colors.brandDark }}>
+            {memberNotice}
+          </Text>
+        )}
+
+        {/* Add members without leaving this screen */}
+        <Text className="text-[13px] font-semibold mt-6 mb-3" style={{ color: colors.textMuted }}>
+          Add members directly
+        </Text>
+        <View className="flex-row gap-3">
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => setShowExisting((v) => !v)}
+            className="flex-1 rounded-2xl border border-white/50 bg-white/25 px-3 py-3 items-center"
+          >
+            <Text className="text-[13px] font-bold" style={{ color: colors.textDark }}>
+              Add Existing Member
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => router.push(`/add-member?groupId=${group.id}` as any)}
+            className="flex-1 rounded-2xl border border-white/50 bg-white/25 px-3 py-3 items-center"
+          >
+            <Text className="text-[13px] font-bold" style={{ color: colors.textDark }}>
+              Add New Member
+            </Text>
+          </TouchableOpacity>
+        </View>
+        {showExisting && (
+          <View className="mt-3">
+            {candidates.length === 0 ? (
+              <Text className="text-[12.5px]" style={{ color: colors.textMuted }}>
+                Everyone you know is already in this group.
+              </Text>
+            ) : (
+              candidates.map((p) => (
+                <TouchableOpacity
+                  key={p.id}
+                  activeOpacity={0.8}
+                  onPress={() => addExisting(p.id)}
+                  className="flex-row items-center rounded-2xl border border-white/50 bg-white/25 px-3 py-2.5 mb-2"
+                >
+                  <View
+                    className="items-center justify-center rounded-full mr-2.5"
+                    style={{ width: 34, height: 34, backgroundColor: colors.successBg }}
+                  >
+                    <Text className="text-[14px] font-extrabold" style={{ color: colors.brandDark }}>
+                      {p.name.trim().charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                  <Text className="flex-1 text-[14px] font-bold" style={{ color: colors.textDark }} numberOfLines={1}>
+                    {p.name}
+                  </Text>
+                  <Ionicons name="person-add-outline" size={17} color={colors.brandDark} />
+                </TouchableOpacity>
+              ))
+            )}
+          </View>
+        )}
+
         <Text className="text-[12px] text-center mt-6" style={{ color: colors.textMuted }}>
           You can also generate a new link anytime if you want to invalidate the current one.
         </Text>
-        <TouchableOpacity className="items-center mt-2 flex-row justify-center gap-1.5" onPress={() => {}}>
+        <TouchableOpacity
+          className="items-center mt-2 flex-row justify-center gap-1.5"
+          onPress={() => {
+            regenerateGroupJoinToken(group.id);
+            setCopied(false);
+          }}
+        >
           <Ionicons name="refresh" size={14} color={colors.brandDark} />
           <Text className="text-[12.5px] font-bold" style={{ color: colors.brandDark }}>
             Generate New Link

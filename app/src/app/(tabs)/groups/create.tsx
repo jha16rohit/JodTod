@@ -4,10 +4,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { BubbleBackdrop, ScreenHeader } from "@/components/groups/ui";
 import { GroupForm } from "@/components/groups/GroupForm";
+import { useAuth } from "@/context/AuthContext";
+import { createGroup } from "@/lib/mockGroups";
 
 export default function CreateGroup() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
 
   return (
     <BubbleBackdrop>
@@ -29,8 +32,25 @@ export default function CreateGroup() {
           <GroupForm
             submitLabel="Create Group"
             showCover="picker"
-            onSubmit={() => {
-              // TODO: wire up to real create-group mutation
+            onSubmit={(values) => {
+              const creatorName =
+                user?.name?.trim() ||
+                (user?.email ? user.email.split("@")[0] : "") ||
+                "Rohit";
+              const budget = Number(values.budget);
+              createGroup(
+                {
+                  name: values.name,
+                  destination: values.destination,
+                  description: values.description,
+                  budget: values.budget.trim() && !Number.isNaN(budget) ? budget : undefined,
+                  dateRange:
+                    values.startDate.trim() || values.endDate.trim()
+                      ? `${values.startDate.trim()} – ${values.endDate.trim()}`.trim()
+                      : undefined,
+                },
+                { name: creatorName, userId: "user_you" }
+              );
               router.replace("/(tabs)/groups" as any);
             }}
           />

@@ -5,12 +5,19 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { BubbleBackdrop, ScreenHeader, GlassCard, colors } from '@/components/groups/ui';
 import { MemberRow, SheetMenuItem } from '@/components/groups/MemberRow';
-import { getGroup, Member } from '@/lib/mockGroups';
+import {
+  activateGroupMember,
+  getGroup,
+  memberStatus,
+  useGroups,
+  Member,
+} from '@/lib/mockGroups';
 
 export default function GroupMembers() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const group = getGroup(id as string);
+  const allGroups = useGroups();
+  const group = allGroups.find((g) => g.id === (id as string)) ?? getGroup(id as string);
   const [menuFor, setMenuFor] = useState<Member | null>(null);
 
   if (!group) return null;
@@ -71,6 +78,16 @@ export default function GroupMembers() {
             <Text className="text-base font-bold mb-4" style={{ color: colors.textDark }}>
               {menuFor?.name}
             </Text>
+            {menuFor && memberStatus(menuFor) === 'pending' && (
+              <SheetMenuItem
+                icon="checkmark-circle-outline"
+                label="Mark as joined (activate)"
+                onPress={() => {
+                  activateGroupMember(group.id, menuFor.id);
+                  setMenuFor(null);
+                }}
+              />
+            )}
             <SheetMenuItem icon="shield-checkmark-outline" label="Make Co-Admin" onPress={() => setMenuFor(null)} />
             <SheetMenuItem icon="person-remove-outline" label="Remove from group" danger onPress={() => setMenuFor(null)} />
             <SheetMenuItem icon="close" label="Cancel" onPress={() => setMenuFor(null)} />

@@ -10,6 +10,7 @@ export const EXPENSE_ICONS: Record<Expense['icon'], { icon: keyof typeof Ionicon
   film: { icon: 'film', colors: ['#A18CD1', '#FBC2EB'] },
   bed: { icon: 'bed', colors: ['#4FACFE', '#00A9E0'] },
   car: { icon: 'car', colors: ['#84FAB0', '#8FD3F4'] },
+  receipt: { icon: 'receipt', colors: ['#34D399', '#22D3EE'] },
 };
 
 export function groupExpensesByDate(expenses: Expense[]) {

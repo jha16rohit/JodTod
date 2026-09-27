@@ -8,7 +8,7 @@ import { BubbleBackdrop, GlassLayers, cardShadow, colors } from '@/components/gr
 import { FilterTabs } from '@/components/groups/FilterTabs';
 import { GroupCard } from '@/components/groups/GroupCard';
 import { EmptyState } from '@/components/groups/EmptyState';
-import { MOCK_GROUPS } from '@/lib/mockGroups';
+import { useGroups } from '@/lib/mockGroups';
 
 type FilterTab = 'All' | 'Active' | 'Completed' | 'Archived';
 const TABS: readonly FilterTab[] = ['All', 'Active', 'Completed', 'Archived'];
@@ -23,7 +23,8 @@ export default function GroupsList() {
   const [query, setQuery] = useState('');
   const [tab, setTab] = useState<FilterTab>('All');
 
-  const groups = FORCE_EMPTY_STATE ? [] : MOCK_GROUPS;
+  const liveGroups = useGroups();
+  const groups = FORCE_EMPTY_STATE ? [] : liveGroups;
 
   const filtered = useMemo(() => {
     return groups.filter((g) => {
