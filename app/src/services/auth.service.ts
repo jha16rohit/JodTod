@@ -475,7 +475,28 @@ export interface RestoreSessionResult {
  * No persisted refresh token:
  * - Session cannot be restored.
  */
+/**
+ * In-flight guard: StrictMode / navigation re-mounts can invoke
+ * restoreSession concurrently. Share one promise instead of firing
+ * duplicate GET /users/me requests.
+ */
+let restoreInFlight: Promise<RestoreSessionResult> | null = null;
+
 export async function restoreSession(options?: {
+  online?: boolean;
+}): Promise<RestoreSessionResult> {
+  if (restoreInFlight) {
+    return restoreInFlight;
+  }
+
+  restoreInFlight = restoreSessionInner(options).finally(() => {
+    restoreInFlight = null;
+  });
+
+  return restoreInFlight;
+}
+
+async function restoreSessionInner(options?: {
   online?: boolean;
 }): Promise<RestoreSessionResult> {
   const hasSession = await hasPersistedSession();
@@ -524,6 +545,19 @@ export async function restoreSession(options?: {
       offline: false,
     };
   } catch (error) {
+    // -------------------------------------------------------
+    // Transient bundle-reload cancelation: keep cached state,
+    // do NOT flip offline, do NOT clear the stored session.
+    // -------------------------------------------------------
+
+    if (error instanceof AuthError && error.code === "REQUEST_CANCELLED") {
+      return {
+        user: cached,
+        restored: Boolean(cached),
+        offline: false,
+      };
+    }
+
     // -------------------------------------------------------
     // Network unavailable
     // -------------------------------------------------------

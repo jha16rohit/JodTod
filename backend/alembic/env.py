@@ -17,7 +17,14 @@ from backend.models.base import Base
 
 # Import every model so SQLAlchemy metadata contains every table.
 from backend.models.activity import Activity
+from backend.models.expense import Expense, ExpenseSplit
+from backend.models.group import Group, GroupMember
+from backend.models.settlement import Settlement
 from backend.models.user import User
+from backend.models.user_preference import UserPreference
+from backend.models.faq import Faq
+from backend.models.support_request import SupportRequest
+from backend.models.group_invitation import GroupInvitation
 from backend.models.session import Session
 from backend.models.otp import OTP
 from backend.models.email_verification import EmailVerification

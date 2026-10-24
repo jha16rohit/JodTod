@@ -36,7 +36,10 @@ async def db():
         # Truncate all auth tables before the test runs.
         await session.execute(text(
             "TRUNCATE email_verifications, otp_records, "
-            "password_resets, sessions, users "
+            "password_resets, sessions, user_preferences, "
+            "support_requests, group_invitations, faqs, "
+            "settlements, expense_splits, expenses, "
+            "group_members, groups, users "
             "RESTART IDENTITY CASCADE"
         ))
         await session.commit()

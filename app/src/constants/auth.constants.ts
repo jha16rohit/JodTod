@@ -77,6 +77,11 @@ export const AUTH_API_PATHS = {
   RESET_PASSWORD: "/auth/reset-password",
 
   CURRENT_USER: "/users/me",
+  PROFILE_DASHBOARD: "/users/me/profile",
+  UPDATE_PROFILE: "/users/me",
+  PROFILE_PHOTO: "/users/me/photo",
+  PREFERENCES: "/users/me/preferences",
+  NOTIFICATION_COUNTS: "/users/me/notifications/counts",
 } as const;
 
 // ---------------------------------------------------------------------------

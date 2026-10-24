@@ -11,7 +11,7 @@ from backend.core.jwt import (
     get_session_id_from_token,
     get_user_id_from_token,
 )
-from backend.database import get_db
+from backend.database import get_db, is_disconnect_error
 from backend.models.session import Session as UserSession
 from backend.models.user import User
 from backend.services.session_service import SessionService
@@ -95,8 +95,13 @@ async def get_current_session(
     """
     Validate the JWT and resolve the corresponding database
     authentication session.
-    """
 
+    This is the first database statement of every authenticated request,
+    and therefore the statement most exposed to a pooled connection that
+    has gone stale. With pool_pre_ping disabled (it cost one extra round
+    trip per checkout on a ~185 ms link), a stale socket is recovered
+    here instead: the read is retried once on a fresh connection.
+    """
     try:
         user_id = get_user_id_from_token(token)
         session_id = get_session_id_from_token(token)
@@ -106,11 +111,24 @@ async def get_current_session(
             "Invalid or expired access token."
         )
 
-    session = await SessionService.get_user_session(
-        db=db,
-        user_id=user_id,
-        session_id=session_id,
-    )
+    try:
+        session = await SessionService.get_user_session(
+            db=db,
+            user_id=user_id,
+            session_id=session_id,
+        )
+    except Exception as exc:
+        if not is_disconnect_error(exc):
+            raise
+        # SQLAlchemy has already invalidated the broken connection, so
+        # the retry draws a fresh one. Costs one round trip, and only in
+        # the rare failure case.
+        await db.rollback()
+        session = await SessionService.get_user_session(
+            db=db,
+            user_id=user_id,
+            session_id=session_id,
+        )
 
     if session is None:
         raise authentication_error(

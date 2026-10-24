@@ -5,9 +5,34 @@ Production SQLAlchemy database infrastructure.
 Design:
     - SQLAlchemy 2.x async engine/session
     - Explicit transaction boundaries
-    - Connection-pool health checks
+    - Connection-liveness strategy that costs no per-request round trip
     - FastAPI-friendly dependency
     - No application-level global DB session
+
+Connection-liveness strategy
+---------------------------
+The database sits ~185 ms RTT away (Supabase pooler, Tokyo), so every
+extra round trip is expensive. SQLAlchemy's ``pool_pre_ping`` issues an
+extra ``SELECT 1`` on EVERY session checkout: measured p50 checkout cost
+was 1394 ms with pre-ping versus 785 ms without (~610 ms per request).
+
+``pool_pre_ping`` is therefore off by default. Stale connections are
+still handled correctly, by three mechanisms that cost nothing in the
+normal path:
+
+    1. ``pool_recycle`` (database_pool_recycle_seconds) retires pooled
+       connections before the server or pooler can drop them as idle.
+    2. SQLAlchemy itself invalidates a pooled connection when a
+       statement fails with a disconnect error, so a broken socket is
+       never handed back out.
+    3. The authentication read — the first statement of every
+       authenticated request and the statement most exposed to a
+       long-idle pooled connection — retries once on a disconnect via
+       is_disconnect_error().
+
+Set DATABASE_POOL_PRE_PING=true only for a deployment where a failed
+request is cheaper than a failed login (for example a trusted, low-RTT
+network), never for the current high-RTT topology.
 """
 
 from __future__ import annotations
@@ -20,6 +45,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -112,6 +138,10 @@ async def transaction(
     Note: the session's first SQL statement autobegins a transaction, so
     a write must happen inside the outermost transaction() rather than
     before it, otherwise it would join a transaction nobody commits.
+
+    For a write on a session that ALREADY holds an autobegun transaction
+    (an authenticated request sharing the auth session), use
+    write_transaction() instead.
     """
     owns_transaction = not session.in_transaction()
     try:
@@ -129,10 +159,111 @@ async def transaction(
         raise
 
 
+@asynccontextmanager
+async def write_transaction(
+    session: AsyncSession,
+) -> AsyncGenerator[AsyncSession, None]:
+    """
+    Commit-atomic boundary for a session that may ALREADY hold an
+    autobegun transaction.
+
+    An authenticated request reuses one session for the whole request
+    (see get_db and dependencies/auth.py), so by the time a write
+    endpoint runs, the session's first statement has already
+    autobegun a transaction. ``transaction()`` correctly refuses to
+    own that transaction, which means it must not be used to commit a
+    write on such a session.
+
+    write_transaction() commits the session's current transaction
+    unconditionally on success and rolls it back on any exception, so a
+    write endpoint keeps a real commit while still sharing the single
+    per-request session.
+    """
+    try:
+        yield session
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        raise
+
+
 async def check_database_connection() -> None:
     """Fail fast if the database is unavailable."""
     async with engine.connect() as connection:
         await connection.execute(text("SELECT 1"))
+
+
+# ============================================================
+# STALE-CONNECTION RECOVERY
+# ============================================================
+
+# Substrings that identify a broken/closed socket rather than a query or
+# constraint problem. Kept as literal fragments because asyncpg and psycopg
+# expose different exception classes for the same condition.
+_DISCONNECT_MARKERS = (
+    "connection is closed",
+    "connection already closed",
+    "connection does not exist",
+    "connection was closed",
+    "connection not open",
+    "server closed the connection",
+    "terminating connection",
+    "the connection is lost",
+    "connection reset",
+    "connection was lost",
+    "connection is closed",
+    "closed transport",
+    "no connection available",
+    "cannot operate on a closed database",
+    "ssl connection has been closed",
+    "socket closed",
+)
+
+
+def is_disconnect_error(exc: BaseException) -> bool:
+    """
+    True when an exception means "the pooled connection is no longer
+    usable", i.e. the request may be safely retried on a fresh
+    connection.
+
+    Used together with ``pool_recycle`` to replace ``pool_pre_ping``:
+    recovering from a stale socket then costs one round trip only in
+    the rare failure case, instead of one round trip on every request.
+
+    SQLAlchemy already marks such exceptions as disconnects and
+    invalidates the pooled connection, so a retry reuses the pool
+    with a freshly opened socket rather than the broken one.
+    """
+    if isinstance(exc, DBAPIError) and exc.connection_invalidated:
+        return True
+
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+
+        name = type(current).__name__.lower()
+        if any(
+            marker in name
+            for marker in (
+                "disconnect",
+                "interfaceerror",
+                "connectiondoesnotexist",
+                "connectiondoesnoteexist",
+                "connectionreseterror",
+                "brokenpipeerror",
+            )
+        ):
+            return True
+
+        message = str(current).lower()
+        if any(marker in message for marker in _DISCONNECT_MARKERS):
+            return True
+
+        cause = current.__cause__ or current.__context__
+        current = cause if isinstance(cause, BaseException) else None
+
+    return False
 
 
 async def initialize_database(
@@ -209,6 +340,8 @@ __all__ = [
     "engine",
     "get_db",
     "transaction",
+    "write_transaction",
+    "is_disconnect_error",
     "check_database_connection",
     "initialize_database",
     "dispose_database",

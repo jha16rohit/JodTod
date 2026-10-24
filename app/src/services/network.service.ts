@@ -65,6 +65,33 @@ export async function isOnline(): Promise<boolean> {
   return isOnlineStatus(state);
 }
 
+/**
+ * True for bundle-reload / unmount fetch cancelation (Hermes surfaces a
+ * generic "fetch failed: Fetch request has been canceled", not AbortError).
+ * Kept local so network.service stays independent of auth.api.
+ */
+function isProbeCanceled(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+  const name = (error as { name?: unknown }).name;
+  if (typeof name === "string" && name === "AbortError") {
+    return true;
+  }
+  const message = (error as { message?: unknown }).message;
+  if (typeof message === "string") {
+    const lower = message.toLowerCase();
+    if (
+      lower.includes("canceled") ||
+      lower.includes("cancelled") ||
+      lower.includes("aborted")
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /** Lightweight HTTP probe used as fallback / confirmation. */
 async function probeReachability(): Promise<NetworkStatus> {
   const controller = new AbortController();
@@ -76,7 +103,12 @@ async function probeReachability(): Promise<NetworkStatus> {
     });
     const reachable = res.ok;
     return { isConnected: reachable, isInternetReachable: reachable, type: "probe" };
-  } catch {
+  } catch (error) {
+    // Canceled bootstrap probe: stay neutral (assume last-known online)
+    // so callers don't flash a false offline banner during bundle reload.
+    if (isProbeCanceled(error)) {
+      return { isConnected: true, isInternetReachable: null, type: "probe-canceled" };
+    }
     return { isConnected: false, isInternetReachable: false, type: "probe" };
   } finally {
     clearTimeout(timer);

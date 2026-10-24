@@ -1,0 +1,99 @@
+# AGENTS.md — JodTod (persistent project memory)
+
+> Read this FIRST on every session. Only dig into `graph.json` / individual files when the task needs more detail than here.
+> Frontend Expo rule lives in `app/AGENTS.md` (pin Expo v57 docs). Backend rule: run everything from repo root.
+
+## 1. What this is
+
+JodTod is a group-expense splitting app (trips/groups → expenses → balances → settlements → trip closure).
+Repo = FastAPI auth + activity backend (`backend/`, Supabase Postgres) + Expo Router mobile app (`app/`). Design spec in `docs/JODTOD_DESIGN_SPEC.md` is the product source of truth; `README.md` is partly stale (see §6).
+
+## 2. Tech stack
+
+Backend (`backend/requirements.txt`, pinned):
+- Python + FastAPI `0.141.1` / Starlette `1.6.0` / Uvicorn `0.53.0`, Pydantic `2.13.5` + pydantic-settings `2.15.0`
+- SQLAlchemy `2.0.53` (async) + Alembic `1.20.0`, drivers asyncpg `0.31.0` + psycopg `3.3.5` (Supabase Postgres)
+- Auth/sec: PyJWT `2.14.0`, pwdlib `0.3.1` + argon2-cffi, email-validator, python-multipart; tests pytest `9.1.1` + pytest-asyncio `1.4.0` (`asyncio_mode=auto`, `testpaths=backend/tests`)
+
+Frontend (`app/package.json`):
+- Expo SDK `~57.0.25` (see `app/AGENTS.md`: read `https://docs.expo.dev/versions/v57.0.0/` before coding), expo-router `~57.0.23`, React `19.2.3`, React Native `0.86.3`
+- expo-secure-store, @react-native-async-storage/async-storage, @react-native-community/netinfo `12.0.1`, NativeWind `^4.2.6` + tailwindcss `^3.4.19`, TypeScript `~6.0.3`
+
+Infra: Supabase Postgres, JWT access + opaque refresh sessions, SMTP email provider (stdlib, worker thread), `alembic.ini` → `script_location=backend/alembic`.
+
+## 3. Architecture (from graph: 1093 nodes / 2725 edges / 110 communities)
+
+Mental model — mobile shell → auth gate → API → service-per-flow → Postgres:
+
+- **Mobile shell (`app/src/app/`)**: expo-router file routes. `index.tsx` splash gate (waits ~3700ms, reads `useAuth()`, routes to `/(tabs)` | `/verify-email` | `/onboarding`). Groups: `(tabs)/groups/index|create|join` → `[id]/index|expenses|members|settings|invite|edit`. Profile cluster: `profile|edit-profile|personal-information|preferences|linked-accounts|app-settings|help-support|about-jodtod`. Auth cluster: `(auth)/login|login-otp|signup|verify-email`. Graph hyperedges: auth flow, groups flow, profile-settings flow.
+- **Mobile state (`app/src/context/AuthContext.tsx` + `services/`)**: `AuthContext` is the SINGLE source of truth (`user/sessionId/isAuthenticated/isVerificationPending/isLoading/isOffline`). Screens never keep own auth copy. `services/auth.service.ts` orchestrates, `auth.api.ts` is thin HTTP, `auth.storage.ts` persists tokens, `network.service.ts` probes reachability (`isOnline/subscribeToNetworkChanges`), `activity.api.ts` feeds Activity tab. Graph: `h_offline_auth_coordination`, `h_token_refresh_singleflight`.
+- **API edge (`backend/main.py`, all routers under `/api`)**: `auth_signup|auth_login|auth_logout|auth_otp|auth_email|auth_password|auth_refresh|auth_oauth`, plus `users`, `activities`. `GET /api/health` (README says `/health` — stale) + `GET /`.
+- **Service-per-flow (`backend/services/`)**: `auth_login_service` (password), `phone_auth_service` + `email_login_otp` + `otp_service` + `otp_providers` (SMTP), `email_verification_service`, `password_reset_service`, `auth_signup_service`, `auth_refresh_service` (rotation), `auth_logout_service`, `session_service`, `user_service`, `token_service`, `auth_oauth_service` (Google/Apple), `activity_service` (user-scoped newest-first feed). Cross-cutting flows in graph: password-login→`SessionService.issue_session`→refresh-rotate; OTP issue→verify→phone-login session.
+- **Gate (`backend/dependencies/auth.py`, `backend/middleware/auth.py`, `backend/core/jwt.py`)**: Bearer extractor → JWT verify → current user+session → `require_active_user`. God nodes: `User` (137 edges), `AuthenticatedUser` (98), `OTPPurpose` (89), `Session` (76) — everything bridges through User/Session.
+- **Data (`backend/models/` + `backend/alembic/versions/`)**: `users`, `sessions` (refresh-token hash only), `otp_records` (hash/expiry/attempts/lock), `email_verifications`, `password_resets`, `activities` (+ detail columns migration). Only changed via Alembic; 4 migrations applied: `55fd1c0613a9` auth tables → `55fd1c0613b0` user lookup indexes → `7a2c9e4f1b3d` activities → `9c1e7a2b4d5f` activity details.
+- **Config/DB (`backend/config.py`, `backend/database.py`)**: `Settings` singleton from `backend/.env` (never commit); async engine init/dispose in lifespan, fail-fast if DB unreachable.
+
+## 4. Key conventions
+
+- **Repo-root imports**: always run from `D:\JodTod` (`from backend.config import settings`). Never run from inside `backend/`. Backend port default is `5001` in `config.py` (README says `5001` — stale).
+- **Typed service errors → safe HTTP in `main.py`**: services raise `*Error(message, code, status_code)` (`SignupError/DuplicateAccountError`, `LoginError/InvalidLoginError`, `LogoutError`, `OTPError`, `RefreshError`, `OAuthError`, `ProviderConfigurationError/DeliveryError`). Handlers map to `{detail, code}` JSON. Login = generic 401 (no user-enumeration oracle); OTP uses 429 for cooldown/lockout, 404 only for caller-supplied destination.
+- **Token hygiene**: raw tokens to client, SHA-256 hashes at rest (`core/security.hash_token`); Argon2 passwords; 6-digit OTP/email codes; refresh rotation reuses→revokes family; dev OTP disclosure gated by config flag.
+- **Mobile**: file-based routing groups `(auth)/(tabs)/groups/[id]`; shared UI in `components/groups/` (`GroupCard/GroupForm/BalanceSummary/ExpenseRow/MemberRow/...`); constants in `constants/auth.constants.ts` (`AUTH_API_PATHS/STORAGE_KEYS/OTP_CONFIG/NETWORK_CONFIG`), types in `types/auth.types.ts` mirror backend schemas; `lib/mockGroups.ts` still backs group screens (backend has no groups/expenses tables yet — activity feed only).
+- **DB**: never hand-edit Supabase tables; `alembic check` → `revision --autogenerate` → review → `upgrade head`. Never edit applied migrations.
+- **Tests**: `pytest.ini` session-scoped asyncio; `conftest.py` truncates scratch DB per test; manual OTP script `test_manual_login_otp_flow.py` is interactive (`pytest -s`).
+- **Secrets**: `backend/.env`, JWT/DB/OAuth/SMTP creds, LAN IPs never committed (5 sensitive files skipped by graph detect).
+
+## 5. Implemented so far
+
+- 2026-09-15 — Auth foundation + architecture (config/DB/models/migrations layout) — `backend/config.py`, `backend/database.py`, `backend/models/`
+- 2026-09-16 — Authentication layer (JWT, hashing, OTP, sessions) — `backend/core/`, `backend/services/otp_service.py`, `session_service.py`
+- 2026-09-19 — Settle page (mobile) — `app/src/app/(tabs)/settle.tsx`
+- 2026-09-25 — Complete Auth (signup/login/logout/refresh/OTP/email/password/OAuth/users routers + services + exception mapping) — `backend/routes/auth_*.py`, `backend/services/auth_*.py`, `backend/main.py`
+- 2026-09-25 — Activity backend (user-scoped feed + 2 migrations + tests) — `backend/routes/activities.py`, `backend/services/activity_service.py`, `backend/models/activity.py`, `backend/alembic/versions/7a2c9e4f*`, `9c1e7a2b*`
+- 2026-09-25 — Activity UI + plus-button entry — `app/src/app/(tabs)/activity.tsx`, `components/AddActionBottomSheet/`
+- 2026-09-26 — Groups UI (list/create/join/detail/expenses/members/settings/invite/edit + shared components, still on `mockGroups`) — `app/src/app/(tabs)/groups/`, `app/src/components/groups/`
+- 2026-09-26 — Login system update + form UI (AuthContext single-truth, offline indicator, storage) — `app/src/context/AuthContext.tsx`, `app/src/services/auth.*`, `components/auth/`
+- 2026-09-27 — Home page update — `app/src/app/(tabs)/index.tsx`, `app/src/app/index.tsx`
+- 2026-09-27 — Knowledge graph + this memory file — `graphify-out/graph.html`, `graphify-out/graph.json`, `graphify-out/GRAPH_REPORT.md`, `AGENTS.md`
+- 2026-09-27 — My Profile backend + photo (dashboard aggregate, avatar_url + migration `b3f8c2a91d4e`, local upload storage, profile UI wired to real data + camera/gallery sheet) — `backend/routes/users.py`, `backend/services/profile_service.py`, `backend/services/profile_photo_service.py`, `backend/schemas/profile.py`, `app/src/app/profile.tsx`, `app/src/services/profile.api.ts`
+- 2026-09-27 — Personal Information + Edit Profile (Page 02: Personal Info central page, server account-health status, PATCH username/phone, email read-only, shared photo hook/sheet, My Profile Edit → Personal Info) — `app/src/app/personal-information.tsx`, `app/src/app/edit-profile.tsx`, `app/src/hooks/useProfilePhoto.ts`, `app/src/components/profile/ProfilePhotoSheet.tsx`, `backend/services/user_service.py`, `backend/schemas/user.py` (+`username`), migration `f1a2b3c4d5e6`, `backend/tests/test_personal_info.py`
+- 2026-09-27 — Preferences + Currency Selection (Page 04/05: static prefs table + migration `a1b2c3d4e5f6`, GET/PATCH prefs + counts API, 5-currency static catalog INR-only, counts from activity rows, Group Invitations → groups/join) — `app/src/app/preferences.tsx`, `app/src/app/currency-selection.tsx`, `app/src/services/preferences.api.ts`, `backend/models/user_preference.py`, `backend/services/preferences_service.py`, `backend/routes/preferences.py`, `backend/schemas/preferences.py`, `backend/tests/test_preferences.py`
+- 2026-09-27 — Help & Support + FAQ + About (Pages 10–12: help search + 5 option rows, FAQ table + seed migration `b2c3d4e5f6a7`, support_requests + migration `c3d4e5f6a7b8`, shared SupportForm, static how-to + legal screens, real licenses from node_modules) — `app/src/app/help-support.tsx`, `faqs.tsx`, `contact-support.tsx`, `report-bug.tsx`, `feature-request.tsx`, `how-to-use.tsx`, `about-jodtod.tsx`, `about-app.tsx`, `terms.tsx`, `privacy-policy.tsx`, `licenses.tsx`, `app/src/services/support.api.ts`, `backend/models/faq.py`, `backend/models/support_request.py`, `backend/tests/test_support.py`
+- 2026-09-27 — Linked Accounts (Page 07: real provider state, Google link/unlink reusing expo-auth-session ID-token flow + server verification, last-method unlink guard, Apple/Facebook unavailable, provider-email columns + migration `d4e5f6a7b8c9`) — `app/src/app/linked-accounts.tsx`, `app/src/services/linked-accounts.api.ts`, `backend/services/provider_link_service.py`, `backend/routes/linked_accounts.py`, `backend/schemas/linked_accounts.py`, `backend/tests/test_linked_accounts.py`
+- 2026-09-27 — Linked Accounts contract hardening (link timestamps + migration `g7a8b9c0d1e2`, idempotent unlink 200, last-method → 409, OpenAPI via FastAPI; server code-exchange flow deliberately NOT built — duplicates the existing verified ID-token flow and needs absent secrets) — `backend/models/user.py` (+linked_at), `backend/services/provider_link_service.py`, `backend/routes/linked_accounts.py`
+- 2026-09-27 — Profile/Settings correction pass (My Profile Edit + App Settings removed, Personal Info cards + Display Name pref, edit-form reload fix, group-invitations table + accept/decline + back fix, OAuth audit) — `app/src/app/profile.tsx`, `personal-information.tsx`, `edit-profile.tsx`, `(tabs)/groups/join.tsx`, `preferences.tsx`, `services/invitations.api.ts`, `backend/models/group_invitation.py`, `services/group_invitation_service.py`, `routes/invitations.py`, migrations `e5f6a7b8c9d0` (display_name) + `f6a7b8c9d0e1` (group_invitations), `backend/tests/test_invitations.py` (deleted `app/src/app/app-settings.tsx`)
+- 2026-09-27 — Profile save + date-format correction (PATCH /users/me silent-rollback fixed via write_transaction; fresh-connection regression tests for NULL→username + all 3 date formats; prefs save serialization + stale-read guard + request timeouts; AuthContext.adoptUser) — `backend/routes/users.py`, `backend/tests/test_personal_info.py`, `test_preferences.py`, `test_profile.py`, `app/src/app/preferences.tsx`, `edit-profile.tsx`, `services/profile.api.ts`, `services/preferences.api.ts`, `context/AuthContext.tsx`
+
+## 6. Known issues / open TODOs
+
+- `README.md` drift: says schemas/services/routes/middleware "not implemented" (they are), says `mobile/` (real dir is `app/`), health at `/health` (real `/api/health`), port `5001` (config default `5001`). Don't trust README for scope; trust graph + code.
+- No groups/expenses/settlements backend yet — mobile group screens read `lib/mockGroups.ts`. Design spec expects full expense lifecycle, receipt OCR queue, settlement suggestions, offline sync, trip-report closure — none implemented server-side.
+- Graph flags 3 AMBIGUOUS edges to verify: `EmailVerification` → `request_email_login_otp()` (`maybe_uses_legacy_table`); offline-sync → final-closure; edit-profile form → personal-info view (`maybe_updates`).
+- 124 isolated nodes / many singleton communities (config prose, splash PNGs `app/assets/images/jodtod/`, `Images/` mockups) — vision nodes are purpose-only, no OCR; thin test communities are noise.
+- `backend/routes/__init__.py` empty; routers wired individually in `main.py` — keep that pattern.
+- Shared DB is at migration `9c1e7a2b4d5f` (`alembic current`, 2026-09-27); `b3f8c2a91d4e` (avatar_url) + `f1a2b3c4d5e6` (username) + `a1b2c3d4e5f6` (user_preferences) + `b2c3d4e5f6a7` (faqs+seed) + `c3d4e5f6a7b8` (support_requests) + `d4e5f6a7b8c9` (provider emails) + `e5f6a7b8c9d0` (display_name) + `f6a7b8c9d0e1` (group_invitations) + `g7a8b9c0d1e2` (link timestamps) are committed-but-unapplied — run `alembic upgrade head` where deploys/tests run before exercising Page 01/02/04 photo+username+prefs paths. Never ran here (no request to touch shared data).
+- SMTP send is blocking stdlib → must stay in worker thread; provider misconfig returns 503/502 (see handlers).
+
+## 7. Decisions log
+
+- Repo-root execution: `backend.*` absolute imports chosen so Alembic/pytest/uvicorn share one path; hence "run from root" rule — don't "fix" by adding sys.path hacks.
+- Service-per-auth-flow (not one auth.py): isolates password vs OTP vs OAuth vs refresh vs logout blast radius; exception mapping stays in `main.py` for uniform safe messages.
+- No-oracle errors: generic login 401 + scoped 404s to prevent account enumeration; keep when adding password-reset (already `password_reset_service.py`).
+- Hash-only token storage + rotation-reuse-revokes: stolen DB rows aren't usable sessions; don't store raw refresh tokens.
+- `AuthContext` single-truth + `network.service` offline-first: phone clients go offline; screens must not duplicate auth state or self-navigate beyond login/logout calls.
+- Expo SDK 57 pinned (`app/AGENTS.md`): Expo breaking changes burned us before — check versioned docs before any Expo API use.
+- Alembic-only DDL + reviewed autogenerate: Supabase dashboard edits would drift; migrations `55fd1c0613a9→…→9c1e7a2b4d5f` are the ledger.
+- Page 02 account-health: RED = EXPENSE-activity total > 10,000 (no expense tables yet, so EXPENSE events are the proxy; amounts parsed from display strings); YELLOW = max(last_login_at, latest activity occurred_at, updated_at) older than 90d (sessions.last_used_at excluded — refresh rotation touches it as background infra); GREEN otherwise; RED beats YELLOW. Computed in `ProfileService.get_account_health`, rendered by client.
+- Page 02 profile edit: PATCH /users/me takes name/username/phone only (email not a field → ignored, never persisted); username format `^[A-Za-z0-9._-]{3,32}$` + case-insensitive uniqueness, phone charset + 7–15 digits + uniqueness; collisions → 409 via `DuplicateProfileFieldError`; identity always from Bearer session. `users.username` needed its own migration (`f1a2b3c4d5e6`) — Page 01 migration only added avatar_url.
+- Profile PATCH commit rule: the route reads (autobegin) on its fresh session BEFORE writing, so `transaction()` never owns/commits and `get_db` never commits on success — updates silently rolled back with HTTP 200 (same-session tests can't see it; only fresh-connection reads can). Write endpoints on fresh/shared-autobegun sessions must use `write_transaction()` (same pattern as PATCH preferences). Regression tests assert via separate connections; fixtures commit setup (endpoint rollbacks must not wipe setup/auth rows) and capture PKs pre-yield (rollbacks expire ORM attrs → teardown must not lazy-load).
+- Page 04/05 preferences: static prefs in `user_preferences` (one row/user, lazy-created with INR/DD-MM-YYYY/monday/en defaults; migration `a1b2c3d4e5f6`); dynamic counts NOT stored — derived from activity rows (EXPENSE→expense_updates, SETTLEMENT→settlement_reminders, MEMBER→group_invitations) until notifications land. Currency allowlist is INR-only server-side (other catalog entries are UI-visible but unselectable); request-schema Literals → 422, service re-check → ValueError/400. Group Invitations → existing `/(tabs)/groups/join` (no duplicate page). Frontend caches prefs in AsyncStorage (same mechanism as auth.storage), written only after server success, failed updates revert.
+- Page 07 linked accounts: provider identity = existing `users.google_subject/apple_subject` columns (OAuth login infra reused: expo-auth-session ID-token flow mobile-side, JWKS verification server-side); `google_email/apple_email` display columns + migration `d4e5f6a7b8c9` (subjects stay source of truth — no duplicate provider table). Linking attaches verified claims to CURRENT user only (never creates users); cross-user subject → 409; unlink blocked when last method remains (password/phone/other-provider). Apple/Facebook creds absent → static unavailable UI. Canonical email/phone never modified by link/unlink.
+- Correction pass: Edit-form reload fix — edit screens load the form ONCE on mount (ref, not state dep); refetch-on-focus/after-revalidation wiped typed input, so Save persisted reloaded values (backend pipeline itself verified working: 58/58 profile/personal-info tests). Blank-name contract restored to 400 (strip-validator caused 422). Display Name = `user_preferences.display_name` (account_name|username, default account_name). Group Invitations back: pushing nested `/(tabs)/groups/join` from another stack pops the caller, so join uses `from`-param + beforeRemove POP intercept → single replace back (no Home hardcode). Invitations = minimal `group_invitations` table (no groups/memberships backend exists; accept only marks accepted). OAuth invalid_request: Android uses WEB client ID (no Android client configured) + placeholder package `com.anonymous.app` + Expo Go proxy redirect — needs Cloud-console package/SHA-1/redirect/test-user setup; no code change made blindly.
+- Graphify AST (952 nodes) + semantic chunks (231 nodes) merged: AST owns imports/structure, semantic owns flows/rationale; re-run `graphify update` for code-only changes, full pipeline when docs/images change.
+
+## 8. Graph reference
+
+`graphify-out/graph.html` / `graphify-out/graph.json` (+ `graphify-out/GRAPH_REPORT.md`) are the queryable map — consult them instead of re-scanning for "which functions call X", "what bridges auth ↔ activity", or cross-community impact; use `graphify query|path|explain` (e.g. `graphify query "how does refresh rotation work"`). Graph files live only in `graphify-out/` (not the repo root).
+
+---
+*Sync rule: after any feature/architecture change, re-run Graphify (`graphify update .` for code-only, full `/graphify .` for docs/images, or `graphify hook install` for auto git-hook rebuilds) and update §5 + §7 here so narrative never drifts from graph/code.*

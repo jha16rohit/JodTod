@@ -8,8 +8,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 import logging
+from pathlib import Path
 
 from backend.config import settings
 from backend.database import (
@@ -27,7 +29,14 @@ from backend.routes.auth_password import router as auth_password_router
 from backend.routes.auth_refresh import router as auth_refresh_router
 from backend.routes.auth_oauth import router as auth_oauth_router
 from backend.routes.activities import router as activities_router
+from backend.routes.expenses import router as expenses_router
+from backend.routes.groups import router as groups_router
+from backend.routes.settlements import router as settlements_router
 from backend.routes.users import router as users_router
+from backend.routes.preferences import router as preferences_router
+from backend.routes.linked_accounts import router as linked_accounts_router
+from backend.routes.invitations import router as invitations_router
+from backend.routes.support import router as support_router
 from backend.services.auth_signup_service import (
     DuplicateAccountError,
     InvalidSignupError,
@@ -95,6 +104,25 @@ app.add_middleware(
 
 
 # ---------------------------------------------------------------------------
+# Profile-photo storage (local filesystem, no paid infrastructure).
+#
+# Files live under backend/uploads/ and are served read-only at /uploads/.
+# users.avatar_url stores the relative reference (e.g.
+# "/uploads/profile_photos/<uuid>.jpg") which the mobile app resolves
+# against the API base URL.
+# ---------------------------------------------------------------------------
+UPLOAD_DIR = Path(__file__).resolve().parent / "uploads"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+(UPLOAD_DIR / "profile_photos").mkdir(parents=True, exist_ok=True)
+
+app.mount(
+    "/uploads",
+    StaticFiles(directory=str(UPLOAD_DIR), html=False, check_dir=False),
+    name="uploads",
+)
+
+
+# ---------------------------------------------------------------------------
 # Authentication Routes
 
 # ---------------------------------------------------------------------------
@@ -153,9 +181,51 @@ app.include_router(
 )
 
 app.include_router(
+    preferences_router,
+    prefix="/api",
+    tags=["Preferences"],
+)
+
+app.include_router(
+    support_router,
+    prefix="/api",
+    tags=["Support"],
+)
+
+app.include_router(
+    linked_accounts_router,
+    prefix="/api",
+    tags=["Linked Accounts"],
+)
+
+app.include_router(
+    invitations_router,
+    prefix="/api",
+    tags=["Invitations"],
+)
+
+app.include_router(
     activities_router,
     prefix="/api",
     tags=["Activities"],
+)
+
+app.include_router(
+    groups_router,
+    prefix="/api",
+    tags=["Groups"],
+)
+
+app.include_router(
+    expenses_router,
+    prefix="/api",
+    tags=["Expenses"],
+)
+
+app.include_router(
+    settlements_router,
+    prefix="/api",
+    tags=["Settlements"],
 )
 
 
